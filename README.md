@@ -59,6 +59,10 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
     "1000013" na coluna Nome denuncia o erro antes de sujar o cadastro;
   - aceita linhas de título antes do cabeçalho (relatório de ERP),
     colunas extras, rodapé e número em formato brasileiro;
+  - **soma linhas repetidas do mesmo material**: relatório de ERP traz
+    uma linha por depósito/filial, e como a v1 não tem filiais o saldo
+    do produto é a soma — testado com um relatório real de 16.777
+    linhas, que virou 3.537 produtos em ~26s;
   - só o nome é obrigatório; sem coluna de SKU o produto é identificado
     pelo nome e recebe um código gerado. Reimportar atualiza em vez de
     duplicar. Há também um modelo pronto para download (tela Produtos →
@@ -129,7 +133,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 105 testes, cobrindo:
+comportamento é o mesmo. 108 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da

@@ -34,6 +34,24 @@ class ProductsImport implements ToCollection
 
     public int $ignorados = 0;
 
+    /** Linhas que se juntaram a um produto já visto nesta importação. */
+    public int $agrupados = 0;
+
+    /**
+     * Produtos já tocados nesta importação, por chave (SKU ou nome).
+     *
+     * Relatório de estoque costuma trazer o mesmo material repetido, uma
+     * linha por depósito/filial — o mesmo código aparece 4, 5 vezes com
+     * quantidades diferentes. Como esta v1 não tem filiais, o estoque do
+     * produto é a SOMA das linhas; sobrescrever deixaria só a última, e o
+     * saldo sairia menor que o real sem nenhum aviso.
+     *
+     * Guardar aqui também evita reconsultar o banco a cada linha repetida.
+     *
+     * @var array<string, Product>
+     */
+    private array $vistos = [];
+
     /** @var array<string, int> campo => índice da coluna reconhecida */
     public array $colunasDetectadas = [];
 
@@ -121,12 +139,26 @@ class ProductsImport implements ToCollection
         // Sem coluna de SKU (ou célula vazia), o identificador vira o próprio
         // nome: a planilha ainda importa, e reimportá-la atualiza em vez de
         // duplicar. O SKU gerado é só um rótulo interno, editável depois.
+        $chave = $sku !== '' ? 'sku:'.$sku : 'nome:'.mb_strtolower($atributos['nome']);
+
+        // Mesma chave já vista nesta importação: é outra linha do mesmo
+        // material (outro depósito). Soma em vez de sobrescrever.
+        if (isset($this->vistos[$chave])) {
+            $produto = $this->vistos[$chave];
+            $produto->quantidade_atual += $atributos['quantidade_atual'];
+            $produto->save();
+            $this->agrupados++;
+
+            return;
+        }
+
         $existente = $sku !== ''
             ? $this->buscarPorSku($companyId, $sku)
             : $this->buscarPorNome($companyId, $atributos['nome']);
 
         if ($existente) {
             $existente->fill($atributos + ['sku' => $sku !== '' ? $sku : $existente->sku])->save();
+            $this->vistos[$chave] = $existente;
             $this->atualizados++;
 
             return;
@@ -137,7 +169,7 @@ class ProductsImport implements ToCollection
         // company_id não entra aqui de propósito: não é fillable (ver
         // Product::$fillable) para nenhuma planilha poder forjá-lo, e a
         // trait BelongsToCompany já preenche a partir do usuário logado.
-        Product::create($atributos);
+        $this->vistos[$chave] = Product::create($atributos);
         $this->criados++;
     }
 

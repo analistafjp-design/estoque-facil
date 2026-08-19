@@ -316,6 +316,15 @@ class ProductIndex extends Component
             $partes[] = $importacao->atualizados.' '.($importacao->atualizados === 1 ? 'atualizado' : 'atualizados');
         }
 
+        if ($importacao->agrupados) {
+            // Explicar o agrupamento importa: quem exportou 16 mil linhas e
+            // viu 3 mil produtos precisa saber que nada se perdeu — as
+            // linhas repetidas (mesmo material em depósitos diferentes)
+            // foram somadas.
+            $partes[] = $importacao->agrupados.' '
+                .($importacao->agrupados === 1 ? 'linha repetida somada' : 'linhas repetidas somadas');
+        }
+
         if ($importacao->ignorados) {
             $partes[] = $importacao->ignorados.' '.($importacao->ignorados === 1 ? 'linha ignorada' : 'linhas ignoradas');
         }

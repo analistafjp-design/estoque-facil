@@ -330,3 +330,78 @@ it('exige que o usuário escolha a coluna de nome', function () {
 
     expect(Product::withoutGlobalScopes()->where('company_id', $this->company->id)->count())->toBe(0);
 });
+
+/**
+ * Relatório de estoque de ERP traz o mesmo material repetido, uma linha
+ * por depósito/filial. Como esta v1 não tem filiais, o saldo do produto é
+ * a SOMA — sobrescrever deixaria só o último depósito e o estoque sairia
+ * menor que o real, sem nenhum aviso.
+ */
+it('soma linhas do mesmo material em depósitos diferentes', function () {
+    $arquivo = planilha([
+        ['Deposito', 'Material', 'Texto breve material', 'Utilizacao livre'],
+        ['D518', '1000024', 'PASTILHA TRICLORO', 750],
+        ['D515', '1000024', 'PASTILHA TRICLORO', 1350],
+        ['D501', '1000024', 'PASTILHA TRICLORO', 2150],
+        ['D520', '1000013', 'COAGULANTE', 1072],
+    ], 'depositos.xlsx');
+
+    Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo)
+        ->call('importar')
+        ->assertHasNoErrors();
+
+    $produtos = Product::withoutGlobalScopes()->where('company_id', $this->company->id)->get();
+
+    expect($produtos)->toHaveCount(2)
+        ->and($produtos->firstWhere('sku', '1000024')->quantidade_atual)->toBe(4250)
+        ->and($produtos->firstWhere('sku', '1000013')->quantidade_atual)->toBe(1072);
+});
+
+it('reconhece o layout de exportação SAP sem ajuda', function () {
+    // Cabeçalhos reais do arquivo que o usuário estava tentando importar.
+    // "Material" é o código; a descrição está em "Texto breve material";
+    // "Centro", "Nome 1" e "Denominação depósito" são texto mas NÃO são o
+    // nome do produto — a coluna certa é a mais descritiva.
+    $arquivo = planilha([
+        ['Centro', 'Nome 1', 'Depósito', 'Denominação depósito', 'Material', 'Texto breve material', 'Grupo de mercadorias', 'Utilização livre'],
+        ['RJB1', 'SPE SANEAMENTO RIO 1 S.A', 'D518', 'ETAs Mar Ponta N', '1000013', 'COAGULANTE FLOCUL ION/ANION 3A', '100201000', 1072],
+        ['RJB1', 'SPE SANEAMENTO RIO 1 S.A', 'D515', 'ETAs Itaocara', '1000024', 'PASTILHA TRICLORO ISOCIANURICO', '100201000', 750],
+    ], 'sap-real.xlsx');
+
+    $componente = Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo);
+
+    $mapa = $componente->get('mapa');
+
+    expect($mapa['nome'])->toBe('5')      // Texto breve material
+        ->and($mapa['sku'])->toBe('4')     // Material
+        ->and($mapa['quantidade_atual'])->toBe('7'); // Utilização livre
+
+    $componente->call('importar')->assertHasNoErrors();
+
+    $produto = Product::withoutGlobalScopes()->where('sku', '1000013')->first();
+    expect($produto->nome)->toBe('COAGULANTE FLOCUL ION/ANION 3A')
+        ->and($produto->quantidade_atual)->toBe(1072);
+});
+
+it('não confunde coluna constante com nome do produto', function () {
+    // "Empresa" tem texto longo mas o MESMO valor em toda linha: descreve
+    // a planilha, não o produto.
+    $arquivo = planilha([
+        ['Empresa', 'Item', 'Qtd'],
+        ['SPE SANEAMENTO RIO 1 S.A', 'CANO PVC 100MM', 5],
+        ['SPE SANEAMENTO RIO 1 S.A', 'JOELHO PVC 100MM', 8],
+    ], 'constante.xlsx');
+
+    Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo)
+        ->call('importar');
+
+    expect(Product::withoutGlobalScopes()->pluck('nome')->all())
+        ->toContain('CANO PVC 100MM')
+        ->not->toContain('SPE SANEAMENTO RIO 1 S.A');
+});

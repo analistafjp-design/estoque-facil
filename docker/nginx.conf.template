@@ -11,6 +11,9 @@ http {
     default_type  application/octet-stream;
     sendfile      on;
     keepalive_timeout 65;
+    # Importação de planilha grande pode passar de 1 minuto no PHP;
+    # sem isso o nginx cortaria a conexão antes de o import terminar.
+    fastcgi_read_timeout 180;
     client_max_body_size 20M;
 
     access_log /dev/stdout;

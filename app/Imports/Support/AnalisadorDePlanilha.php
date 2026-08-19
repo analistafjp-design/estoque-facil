@@ -53,7 +53,8 @@ final class AnalisadorDePlanilha
 
         $mapa = $mapeador->ajustarPeloConteudo(
             $cabecalho['mapa'],
-            array_slice($dados, 0, 20)
+            array_slice($dados, 0, 40),
+            $linhas[$cabecalho['indice']]
         );
 
         return [

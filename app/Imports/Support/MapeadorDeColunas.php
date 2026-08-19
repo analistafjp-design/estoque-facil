@@ -69,12 +69,13 @@ final class MapeadorDeColunas
                 'quant', 'estoque', 'estoqueatual', 'saldo', 'saldoatual',
                 'saldoestoque', 'qty', 'quantity', 'stock', 'onhand',
                 'disponivel', 'existencia', 'emestoque',
-                'quantidadeemestoque',
+                'quantidadeemestoque', 'utilizacaolivre',
             ],
             'parciais' => [
                 'quantidadeemestoque', 'quantidadeatual', 'saldoestoque',
                 'estoqueatual', 'saldoatual', 'disponivel', 'existencia',
                 'quantidade', 'quantity', 'estoque', 'saldo', 'stock',
+                'utilizacaolivre',
             ],
         ],
         'nome' => [
@@ -83,11 +84,12 @@ final class MapeadorDeColunas
                 'item', 'material', 'mercadoria', 'artigo', 'denominacao',
                 'nomeproduto', 'nomedoproduto', 'descricaoproduto',
                 'descricaodoproduto', 'desc', 'descricaoitem', 'nomeitem',
-                'titulo',
+                'titulo', 'textobreve', 'textobrevematerial',
             ],
             'parciais' => [
                 'descricaodoproduto', 'descricaoproduto', 'nomedoproduto',
-                'nomeproduto', 'descricaoitem', 'nomeitem', 'denominacao',
+                'nomeproduto', 'descricaoitem', 'nomeitem',
+                'textobrevematerial', 'textobreve',
                 'mercadoria', 'descricao', 'description', 'material',
                 'produto', 'artigo', 'titulo', 'name', 'item',
             ],
@@ -185,28 +187,74 @@ final class MapeadorDeColunas
     /**
      * Corrige o mapa olhando o CONTEÚDO das colunas, não só o cabeçalho.
      *
-     * Existe cabeçalho ambíguo que só o dado resolve: em exportação de ERP
-     * estilo SAP a coluna "Material" é o CÓDIGO (1000013), enquanto em
-     * outros sistemas "Material" é o nome do produto. Se o nome apontar
-     * para uma coluna só de números e houver outra coluna de texto livre
-     * disponível, o texto é o nome — código não descreve produto nenhum.
+     * Cabeçalho sozinho não basta: numa exportação SAP a coluna "Material"
+     * é o CÓDIGO (1000013), enquanto em outros sistemas "Material" é o
+     * nome do produto — o mesmo texto, significados opostos. E na mesma
+     * planilha existem várias colunas de texto que NÃO são o nome
+     * ("Centro", "Denominação depósito"), então não serve pegar a
+     * primeira que aparecer.
+     *
+     * Critério: a coluna de nome é a mais DESCRITIVA — texto longo e
+     * variado. "RJB1" repetido em toda linha descreve pouco;
+     * "COAGULANTE FLOCUL ION/ANION" descreve muito. Cabeçalho que sugere
+     * nome vale um bônus, mas não decide sozinho.
      *
      * @param  array<string, int>  $mapa
      * @param  list<array<int, mixed>>  $amostra  linhas de dados (sem o cabeçalho)
+     * @param  array<int, mixed>  $cabecalho
      * @return array<string, int>
      */
-    public function ajustarPeloConteudo(array $mapa, array $amostra): array
+    public function ajustarPeloConteudo(array $mapa, array $amostra, array $cabecalho = []): array
     {
         if ($amostra === [] || ! isset($mapa['nome'])) {
             return $mapa;
         }
 
-        if (! $this->colunaEhMajoritariamenteNumerica($amostra, $mapa['nome'])) {
+        if ($this->serveComoNome($amostra, $mapa['nome'])) {
             return $mapa;
         }
 
-        // O "nome" detectado é uma coluna numérica: procura uma coluna de
-        // texto que ainda não tenha dono para assumir o lugar.
+        $ocupadas = array_values(array_diff($mapa, [$mapa['nome']]));
+        $melhor = $this->colunaMaisDescritiva($amostra, $ocupadas, $cabecalho);
+
+        if ($melhor === null) {
+            return $mapa;
+        }
+
+        // A coluna numérica que estava como nome é, quase sempre, o código.
+        if (! isset($mapa['sku']) && $this->colunaEhMajoritariamenteNumerica($amostra, $mapa['nome'])) {
+            $mapa['sku'] = $mapa['nome'];
+        }
+
+        $mapa['nome'] = $melhor;
+
+        return $mapa;
+    }
+
+    /**
+     * Serve como nome se não for coluna numérica e tiver variedade — uma
+     * coluna com o mesmo valor em toda linha (o nome da empresa, o código
+     * do centro) identifica a planilha, não o produto.
+     *
+     * @param  list<array<int, mixed>>  $amostra
+     */
+    private function serveComoNome(array $amostra, int $indice): bool
+    {
+        if ($this->colunaEhMajoritariamenteNumerica($amostra, $indice)) {
+            return false;
+        }
+
+        return $this->pontuar($amostra, $indice) > 0
+            && $this->proporcaoDistinta($amostra, $indice) >= 0.15;
+    }
+
+    /**
+     * @param  list<array<int, mixed>>  $amostra
+     * @param  list<int>  $ocupadas
+     * @param  array<int, mixed>  $cabecalho
+     */
+    private function colunaMaisDescritiva(array $amostra, array $ocupadas, array $cabecalho): ?int
+    {
         $indices = [];
         foreach ($amostra as $linha) {
             foreach (array_keys($linha) as $indice) {
@@ -214,26 +262,112 @@ final class MapeadorDeColunas
             }
         }
 
+        $melhor = null;
+        $melhorNota = 0.0;
+
         foreach (array_keys($indices) as $indice) {
-            if (in_array($indice, $mapa, true)) {
+            if (in_array($indice, $ocupadas, true)) {
                 continue;
             }
 
-            if (! $this->colunaEhMajoritariamenteNumerica($amostra, $indice)
-                && $this->colunaTemTextoUtil($amostra, $indice)) {
-                // A coluna numérica que estava como nome vira SKU, se ainda
-                // não houver um — é justamente o que ela é.
-                if (! isset($mapa['sku'])) {
-                    $mapa['sku'] = $mapa['nome'];
-                }
+            $nota = $this->pontuar($amostra, $indice);
 
-                $mapa['nome'] = $indice;
+            if ($nota <= 0) {
+                continue;
+            }
 
-                return $mapa;
+            // Bônus quando o cabeçalho também sugere nome: desempata entre
+            // duas colunas de texto igualmente ricas ("Denominação
+            // depósito" x "Texto breve material").
+            if ($this->cabecalhoSugereNome($cabecalho[$indice] ?? null)) {
+                $nota *= 3;
+            }
+
+            if ($nota > $melhorNota) {
+                $melhorNota = $nota;
+                $melhor = $indice;
             }
         }
 
-        return $mapa;
+        return $melhor;
+    }
+
+    /**
+     * Nota de "quão descritiva" a coluna é: comprimento médio do texto
+     * vezes a proporção de valores distintos. Zero se for numérica, se
+     * não tiver letra ou se for curta demais (coluna de unidade "KG",
+     * marcador "X").
+     *
+     * @param  list<array<int, mixed>>  $amostra
+     */
+    private function pontuar(array $amostra, int $indice): float
+    {
+        if ($this->colunaEhMajoritariamenteNumerica($amostra, $indice)) {
+            return 0.0;
+        }
+
+        $comprimentos = [];
+        $comLetra = 0;
+
+        foreach ($amostra as $linha) {
+            $valor = $linha[$indice] ?? null;
+
+            if (! is_scalar($valor) || trim((string) $valor) === '') {
+                continue;
+            }
+
+            $texto = trim((string) $valor);
+            $comprimentos[] = mb_strlen($texto);
+
+            if (preg_match('/\p{L}/u', $texto)) {
+                $comLetra++;
+            }
+        }
+
+        if ($comprimentos === [] || $comLetra === 0) {
+            return 0.0;
+        }
+
+        $media = array_sum($comprimentos) / count($comprimentos);
+
+        if ($media < 4) {
+            return 0.0;
+        }
+
+        return $media * $this->proporcaoDistinta($amostra, $indice);
+    }
+
+    /** @param  list<array<int, mixed>>  $amostra */
+    private function proporcaoDistinta(array $amostra, int $indice): float
+    {
+        $valores = [];
+
+        foreach ($amostra as $linha) {
+            $valor = $linha[$indice] ?? null;
+
+            if (is_scalar($valor) && trim((string) $valor) !== '') {
+                $valores[] = trim((string) $valor);
+            }
+        }
+
+        return $valores === [] ? 0.0 : count(array_unique($valores)) / count($valores);
+    }
+
+    private function cabecalhoSugereNome(mixed $cabecalho): bool
+    {
+        $texto = self::normalizar($cabecalho);
+
+        if ($texto === '') {
+            return false;
+        }
+
+        foreach (self::SINONIMOS['nome']['parciais'] as $sinonimo) {
+            if (str_contains($texto, $sinonimo)) {
+                return true;
+            }
+        }
+
+        return in_array($texto, self::SINONIMOS['nome']['exatos'], true);
     }
 
     /** @param  list<array<int, mixed>>  $amostra */
@@ -257,26 +391,6 @@ final class MapeadorDeColunas
         }
 
         return $preenchidas > 0 && ($numericas / $preenchidas) >= 0.8;
-    }
-
-    /**
-     * Texto que serve como nome: precisa ter alguma letra e um mínimo de
-     * corpo — coluna de "UN"/"KG" ou de marcador "X" não é descrição.
-     *
-     * @param  list<array<int, mixed>>  $amostra
-     */
-    private function colunaTemTextoUtil(array $amostra, int $indice): bool
-    {
-        foreach ($amostra as $linha) {
-            $valor = $linha[$indice] ?? null;
-
-            if (is_scalar($valor) && preg_match('/\p{L}/u', (string) $valor)
-                && mb_strlen(trim((string) $valor)) >= 4) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**
