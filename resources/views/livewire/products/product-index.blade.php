@@ -198,8 +198,12 @@
         <form wire:submit="importar" class="p-6">
             <h2 class="text-lg font-medium text-gray-900">Importar produtos de uma planilha</h2>
             <p class="mt-1 text-sm text-gray-500">
-                Use o modelo (botão "Modelo de planilha") para garantir as colunas certas.
-                Produto com o mesmo SKU é atualizado; SKU novo é criado.
+                Pode enviar a planilha que você já tem — do sistema antigo, do ERP,
+                do fornecedor. As colunas são reconhecidas automaticamente pelo
+                cabeçalho (ex.: "Produto", "Descrição" ou "Item" viram o nome;
+                "Código", "Ref." ou "SKU" viram o código), em qualquer ordem, e
+                colunas que não servem são ignoradas. Só o nome do produto é
+                obrigatório. Produto já cadastrado é atualizado, não duplicado.
             </p>
 
             <div class="mt-4">

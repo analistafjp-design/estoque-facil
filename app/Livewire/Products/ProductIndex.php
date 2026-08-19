@@ -12,7 +12,7 @@ use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\Validators\ValidationException;
+use RuntimeException;
 
 #[Layout('layouts.app')]
 class ProductIndex extends Component
@@ -121,23 +121,58 @@ class ProductIndex extends Component
             'arquivoImportacao' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
         ]);
 
+        $importacao = new ProductsImport;
+
         try {
-            Excel::import(new ProductsImport, $this->arquivoImportacao->getRealPath());
-        } catch (ValidationException $e) {
-            $primeira = collect($e->failures())->first();
-            $this->addError(
-                'arquivoImportacao',
-                $primeira
-                    ? "Linha {$primeira->row()}, coluna \"{$primeira->attribute()}\": ".implode(' ', $primeira->errors())
-                    : 'A planilha tem linhas inválidas.'
-            );
+            Excel::import($importacao, $this->arquivoImportacao->getRealPath());
+        } catch (RuntimeException $e) {
+            // Único erro que interrompe tudo: não deu pra achar sequer a
+            // coluna de nome. Linha solta inválida não aborta a importação,
+            // é contabilizada como ignorada.
+            $this->addError('arquivoImportacao', $e->getMessage());
 
             return;
         }
 
         $this->showImport = false;
         $this->reset('arquivoImportacao');
-        session()->flash('status', 'Planilha importada com sucesso.');
+        session()->flash('status', $this->resumoDaImportacao($importacao));
+    }
+
+    /**
+     * Conta o que aconteceu e diz quais colunas foram reconhecidas. Como a
+     * planilha é de formato livre, o usuário precisa conseguir conferir se
+     * o sistema entendeu as colunas como ele esperava — sem isso, uma
+     * coluna lida errado só apareceria muito depois, como estoque furado.
+     */
+    private function resumoDaImportacao(ProductsImport $importacao): string
+    {
+        $partes = [];
+
+        if ($importacao->criados) {
+            $partes[] = $importacao->criados.' '.($importacao->criados === 1 ? 'produto criado' : 'produtos criados');
+        }
+
+        if ($importacao->atualizados) {
+            $partes[] = $importacao->atualizados.' '.($importacao->atualizados === 1 ? 'atualizado' : 'atualizados');
+        }
+
+        if ($importacao->ignorados) {
+            $partes[] = $importacao->ignorados.' '.($importacao->ignorados === 1 ? 'linha ignorada' : 'linhas ignoradas');
+        }
+
+        $rotulos = [
+            'nome' => 'nome',
+            'sku' => 'SKU',
+            'categoria' => 'categoria',
+            'quantidade_atual' => 'quantidade',
+            'estoque_minimo' => 'estoque mínimo',
+        ];
+
+        $detectadas = array_values(array_intersect_key($rotulos, $importacao->colunasDetectadas));
+
+        return ($partes ? implode(', ', $partes) : 'Nenhuma linha importada')
+            .'. Colunas reconhecidas: '.implode(', ', $detectadas).'.';
     }
 
     public function render(): View

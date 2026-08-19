@@ -43,10 +43,17 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
 - Lançamento de entrada/saída de estoque, com atualização automática da
   quantidade na mesma transação
 - Alerta visual quando produto atinge o estoque mínimo
-- Importação de produtos via planilha Excel (upsert por SKU: SKU
-  existente atualiza, SKU novo cria) — modelo de planilha disponível
-  para download dentro do app (tela Produtos → "Modelo de planilha", ou
-  `GET /produtos-modelo-planilha` autenticado)
+- Importação de produtos via planilha Excel **de formato livre**: as
+  colunas são reconhecidas pelo cabeçalho, por sinônimos e em qualquer
+  ordem ("Produto"/"Descrição"/"Item" → nome; "Código"/"Ref."/"SKU" →
+  código; "Estoque"/"Saldo"/"Qtd" → quantidade), ignorando acento, caixa
+  e pontuação. Aceita linhas de título antes do cabeçalho (relatório
+  exportado de ERP), colunas extras, rodapé e número em formato
+  brasileiro. Só o nome é obrigatório; sem coluna de SKU o produto é
+  identificado pelo nome e recebe um código gerado. Reimportar atualiza
+  em vez de duplicar. Há também um modelo pronto para download (tela
+  Produtos → "Modelo de planilha", ou `GET /produtos-modelo-planilha`
+  autenticado), mas usá-lo é opcional
 - Exportação do estoque atual para Excel
 - Histórico de movimentações por produto (quem, quando, tipo, quantidade)
 - Dashboard: total de produtos, produtos com estoque baixo, movimentações
@@ -110,7 +117,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 69 testes, cobrindo:
+comportamento é o mesmo. 93 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
@@ -121,7 +128,10 @@ comportamento é o mesmo. 69 testes, cobrindo:
 - **movimentação de estoque** — entrada, saída, bloqueio de saída maior
   que o estoque, transação atômica;
 - **convite** — envio, aceite, expiração, rate limiting;
-- **import/export** de planilha.
+- **import/export** de planilha, incluindo detecção de coluna por
+  sinônimo, cabeçalho fora da primeira linha e formato numérico variado;
+- **proxy/HTTPS** — garante que atrás do balanceador da hospedagem a URL
+  dos assets sai em `https` (senão o navegador bloqueia o CSS).
 
 ## Deploy
 
@@ -179,7 +189,8 @@ escopo desta v1 implementar, mas é o próximo passo natural.
 app/
 ├── Enums/               UserRole, MovementType, InvitationStatus
 ├── Exports/              Maatwebsite: exportação de estoque e planilha modelo
-├── Imports/              Maatwebsite: importação de produtos (upsert por SKU)
+├── Imports/              importação de planilha de formato livre
+│   └── Support/          detecção de colunas por sinônimo e leitura de número
 ├── Http/Middleware/       EnsureUserIsAdmin (rota /convites)
 ├── Livewire/              componentes de tela (Dashboard, Products, Invitations)
 ├── Mail/                   InvitationMail

@@ -2,64 +2,179 @@
 
 namespace App\Imports;
 
+use App\Imports\Support\LeitorDeNumero;
+use App\Imports\Support\MapeadorDeColunas;
 use App\Models\Product;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Maatwebsite\Excel\Concerns\SkipsEmptyRows;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
-use Maatwebsite\Excel\Concerns\WithValidation;
+use Illuminate\Support\Str;
+use Maatwebsite\Excel\Concerns\ToCollection;
+use RuntimeException;
 
 /**
- * Lê a planilha modelo (ver stubs/products-template + rota
- * products.import-template) e cria ou atualiza produto por SKU.
+ * Importa produtos de QUALQUER planilha, não só do modelo do sistema.
  *
- * Atualizar em vez de rejeitar quando o SKU já existe é de propósito:
- * é comum reimportar a mesma planilha depois de um inventário físico
- * só para corrigir a quantidade — forçar o usuário a apagar tudo e
- * recomeçar seria pior experiência que a spec não pede.
+ * O usuário normalmente não monta o arquivo: ele exporta do sistema
+ * antigo/ERP/fornecedor e cada um nomeia as colunas do seu jeito. Por isso
+ * aqui não há cabeçalho obrigatório — MapeadorDeColunas descobre quais
+ * colunas são quais, e linhas/colunas que não se encaixam são ignoradas em
+ * vez de derrubar a importação inteira.
+ *
+ * O único campo indispensável é o nome: produto sem nome não existe. SKU,
+ * categoria e quantidades são opcionais e têm valor padrão.
+ *
+ * Continua valendo o upsert por SKU da versão anterior: reimportar a mesma
+ * planilha depois de um inventário atualiza, não duplica.
  */
-class ProductsImport implements SkipsEmptyRows, ToModel, WithHeadingRow, WithValidation
+class ProductsImport implements ToCollection
 {
-    public function model(array $row): Product
+    public int $criados = 0;
+
+    public int $atualizados = 0;
+
+    public int $ignorados = 0;
+
+    /** @var array<string, int> campo => índice da coluna reconhecida */
+    public array $colunasDetectadas = [];
+
+    public function collection(Collection $linhas): void
     {
-        // company_id nunca vem da planilha (não é dado que o usuário deva
-        // poder falsificar); sempre a empresa de quem está importando.
-        $companyId = Auth::user()->company_id;
+        $mapeador = new MapeadorDeColunas;
 
-        $produto = Product::withoutGlobalScopes()
-            ->where('company_id', $companyId)
-            ->where('sku', $row['sku'])
-            ->first();
+        $cabecalho = $mapeador->localizarCabecalho($linhas);
 
-        // company_id não entra aqui: não é fillable de propósito (ver
-        // Product::$fillable) para nenhum formulário poder forjá-lo, e no
-        // create BelongsToCompany já preenche sozinho a partir do usuário
-        // logado — que é o mesmo $companyId calculado acima.
-        $atributos = [
-            'nome' => $row['nome'],
-            'sku' => $row['sku'],
-            'categoria' => $row['categoria'] ?? null,
-            'quantidade_atual' => (int) ($row['quantidade_atual'] ?? 0),
-            'estoque_minimo' => (int) ($row['estoque_minimo'] ?? 0),
-        ];
-
-        if ($produto) {
-            $produto->fill($atributos)->save();
-
-            return $produto;
+        if ($cabecalho === null) {
+            throw new RuntimeException(
+                'Não foi possível identificar as colunas da planilha. '
+                .'É preciso haver uma linha de cabeçalho com pelo menos uma '
+                .'coluna de nome do produto (ex.: "Nome", "Produto", '
+                .'"Descrição" ou "Item").'
+            );
         }
 
-        return new Product($atributos);
+        $this->colunasDetectadas = $cabecalho['mapa'];
+        $companyId = Auth::user()->company_id;
+
+        foreach ($linhas as $posicao => $linha) {
+            // Pula tudo até o cabeçalho, inclusive (títulos, datas, etc.).
+            if ($posicao <= $cabecalho['indice']) {
+                continue;
+            }
+
+            $this->processarLinha(
+                is_array($linha) ? $linha : $linha->toArray(),
+                $cabecalho['mapa'],
+                $companyId
+            );
+        }
     }
 
-    public function rules(): array
+    /**
+     * @param  array<int, mixed>  $linha
+     * @param  array<string, int>  $mapa
+     */
+    private function processarLinha(array $linha, array $mapa, int $companyId): void
     {
-        return [
-            'nome' => ['required', 'string', 'max:255'],
-            'sku' => ['required', 'string', 'max:50'],
-            'categoria' => ['nullable', 'string', 'max:255'],
-            'quantidade_atual' => ['nullable', 'integer', 'min:0'],
-            'estoque_minimo' => ['nullable', 'integer', 'min:0'],
+        $nome = $this->valor($linha, $mapa, 'nome');
+
+        // Linha em branco ou de rodapé ("Total:", "Fim do relatório") não é
+        // erro do usuário — é ruído normal de planilha exportada. Ignorar em
+        // silêncio é melhor que abortar tudo por causa dela.
+        if ($nome === '') {
+            $this->ignorados++;
+
+            return;
+        }
+
+        $atributos = [
+            'nome' => Str::limit($nome, 255, ''),
+            'categoria' => Str::limit($this->valor($linha, $mapa, 'categoria'), 255, '') ?: null,
+            'quantidade_atual' => max(0, LeitorDeNumero::paraInteiro($this->bruto($linha, $mapa, 'quantidade_atual'))),
+            'estoque_minimo' => max(0, LeitorDeNumero::paraInteiro($this->bruto($linha, $mapa, 'estoque_minimo'))),
         ];
+
+        $sku = Str::limit($this->valor($linha, $mapa, 'sku'), 50, '');
+
+        // Sem coluna de SKU (ou célula vazia), o identificador vira o próprio
+        // nome: a planilha ainda importa, e reimportá-la atualiza em vez de
+        // duplicar. O SKU gerado é só um rótulo interno, editável depois.
+        $existente = $sku !== ''
+            ? $this->buscarPorSku($companyId, $sku)
+            : $this->buscarPorNome($companyId, $atributos['nome']);
+
+        if ($existente) {
+            $existente->fill($atributos + ['sku' => $sku !== '' ? $sku : $existente->sku])->save();
+            $this->atualizados++;
+
+            return;
+        }
+
+        $atributos['sku'] = $sku !== '' ? $sku : $this->gerarSku($companyId, $atributos['nome']);
+
+        // company_id não entra aqui de propósito: não é fillable (ver
+        // Product::$fillable) para nenhuma planilha poder forjá-lo, e a
+        // trait BelongsToCompany já preenche a partir do usuário logado.
+        Product::create($atributos);
+        $this->criados++;
+    }
+
+    private function buscarPorSku(int $companyId, string $sku): ?Product
+    {
+        return Product::withoutGlobalScopes()
+            ->where('company_id', $companyId)
+            ->where('sku', $sku)
+            ->first();
+    }
+
+    private function buscarPorNome(int $companyId, string $nome): ?Product
+    {
+        return Product::withoutGlobalScopes()
+            ->whereNull('deleted_at')
+            ->where('company_id', $companyId)
+            ->where('nome', $nome)
+            ->first();
+    }
+
+    /**
+     * Deriva um SKU legível do nome, garantindo unicidade dentro da empresa
+     * (a tabela tem índice único em company_id + sku).
+     */
+    private function gerarSku(int $companyId, string $nome): string
+    {
+        $base = Str::upper(Str::limit(Str::slug($nome, '-'), 40, '')) ?: 'PRODUTO';
+
+        $sku = $base;
+        $sufixo = 2;
+
+        while ($this->buscarPorSku($companyId, $sku)) {
+            $sku = Str::limit($base, 45, '').'-'.$sufixo;
+            $sufixo++;
+        }
+
+        return $sku;
+    }
+
+    /**
+     * @param  array<int, mixed>  $linha
+     * @param  array<string, int>  $mapa
+     */
+    private function valor(array $linha, array $mapa, string $campo): string
+    {
+        $bruto = $this->bruto($linha, $mapa, $campo);
+
+        return is_scalar($bruto) ? trim((string) $bruto) : '';
+    }
+
+    /**
+     * @param  array<int, mixed>  $linha
+     * @param  array<string, int>  $mapa
+     */
+    private function bruto(array $linha, array $mapa, string $campo): mixed
+    {
+        if (! isset($mapa[$campo])) {
+            return null;
+        }
+
+        return $linha[$mapa[$campo]] ?? null;
     }
 }
