@@ -1,58 +1,197 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Estoque Fácil PRO
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Sistema web de controle de estoque para pequenas e médias empresas, com
+suporte a múltiplas empresas (multi-tenant) e múltiplos usuários por
+empresa.
 
-## About Laravel
+> **Projeto novo e independente.** Criado do zero (`laravel new`), sem
+> herdar código, banco, credencial ou configuração de nenhum outro projeto
+> já existente nesta conta.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+O problema que resolve: pequena empresa que controla estoque em planilha
+solta ou de cabeça perde venda por falta de produto, ou trava capital em
+excesso de estoque parado. Este app dá visibilidade — quanto tem de cada
+produto, o que está no ou abaixo do mínimo, quem mexeu no estoque e quando.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Para como o isolamento entre empresas funciona por baixo dos panos, onde
+ficam as credenciais e como o fluxo de autenticação/convite está montado,
+ver [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Stack
 
-## Learning Laravel
+- **Backend:** Laravel 13, PHP 8.4+
+- **Banco de dados:** MySQL 8
+- **Frontend:** Blade + Livewire (+ [Volt][volt] nas telas de auth do
+  Breeze) + Tailwind CSS — sem SPA separada
+- **Autenticação:** Laravel Breeze
+- **Planilha:** [Maatwebsite/Laravel-Excel][excel] (import/export)
+- **Testes:** [Pest][pest]
+- **PWA:** manifest + service worker próprios (`public/manifest.webmanifest`,
+  `public/sw.js`) — instalável em desktop, Android e iOS
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+[volt]: https://livewire.laravel.com/docs/volt
+[excel]: https://docs.laravel-excel.com/
+[pest]: https://pestphp.com/
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Funcionalidades (v1)
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+- Cadastro de empresa (conta principal) na criação da conta
+- Convite de novos usuários por e-mail, com papel (`admin`/`operador`)
+- Login com controle de sessão e permissão por papel
+- CRUD de produto — criar, editar, listar, **desativar** (soft delete,
+  nunca apaga de verdade: o histórico de movimentação continua íntegro)
+- Lançamento de entrada/saída de estoque, com atualização automática da
+  quantidade na mesma transação
+- Alerta visual quando produto atinge o estoque mínimo
+- Importação de produtos via planilha Excel (upsert por SKU: SKU
+  existente atualiza, SKU novo cria) — modelo de planilha disponível
+  para download dentro do app (tela Produtos → "Modelo de planilha", ou
+  `GET /produtos-modelo-planilha` autenticado)
+- Exportação do estoque atual para Excel
+- Histórico de movimentações por produto (quem, quando, tipo, quantidade)
+- Dashboard: total de produtos, produtos com estoque baixo, movimentações
+  recentes
 
-## Agentic Development
+**Fora de escopo por decisão, não por esquecimento:** integração com
+marketplace, app mobile nativo, múltiplas filiais, relatórios com
+gráficos. Ver o prompt original do projeto para o racional completo.
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Instalação local
+
+Pré-requisitos: PHP 8.4+, Composer, Node 20+, MySQL 8 (ou MariaDB
+compatível) rodando localmente ou acessível pela rede.
 
 ```bash
-composer require laravel/boost --dev
+git clone <url-do-repositorio> estoque-facil
+cd estoque-facil
 
-php artisan boost:install
+composer install
+npm install
+
+cp .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Abra o `.env` e preencha `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` com
+as credenciais do seu MySQL local (o `.env.example` documenta cada
+variável). Crie o banco antes de migrar — o Laravel não cria o database
+sozinho:
 
-## Contributing
+```sql
+CREATE DATABASE estoque_facil CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Migrations
 
-## Code of Conduct
+```bash
+php artisan migrate
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Não tem seeder de dados de exemplo na v1 — o primeiro registro
+(`/register`) já cria a primeira empresa e o primeiro usuário (admin).
 
-## Security Vulnerabilities
+### Rodando em desenvolvimento
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+composer dev
+```
 
-## License
+Isso sobe o servidor PHP (`php artisan serve`), o worker de fila, o
+`pail` (log em tempo real) e o Vite em modo watch, tudo junto — ver o
+script `dev` em `composer.json` se quiser rodar as peças separadas.
+Acesse `http://localhost:8000`.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Testes
+
+```bash
+php artisan test
+```
+
+A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
+precisar de banco à parte) — decisão comum na comunidade Laravel para
+suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
+comportamento é o mesmo. 69 testes, cobrindo:
+
+- **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
+  não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
+  Empresa B, nem manipulando ID na URL;
+- **papéis** admin/operador;
+- **CRUD de produto**, incluindo SKU duplicado/único por empresa e soft
+  delete;
+- **movimentação de estoque** — entrada, saída, bloqueio de saída maior
+  que o estoque, transação atômica;
+- **convite** — envio, aceite, expiração, rate limiting;
+- **import/export** de planilha.
+
+## Deploy
+
+Qualquer host que rode PHP 8.4+ com extensões padrão do Laravel
+(`pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`,
+`fileinfo`, `gd`, `zip` — para o Maatwebsite/Excel) e um MySQL 8 acessível
+serve: VPS com Nginx/Apache + PHP-FPM, ou uma plataforma gerenciada de
+PHP. Passos, independente de onde:
+
+1. `composer install --no-dev --optimize-autoloader`
+2. `npm install && npm run build` (gera `public/build/`, os assets com
+   hash que o Vite referencia — sem isso a página carrega sem CSS/JS)
+3. Configurar as variáveis de ambiente de produção (não versionadas —
+   ver `.env.example` para a lista completa e o que cada uma faz):
+   - `APP_ENV=production`, `APP_DEBUG=false` (**crítico** — com `true`,
+     um erro mostra stack trace pro usuário final; a spec exige log
+     configurado sem vazar isso)
+   - `APP_KEY` — gerar com `php artisan key:generate` **no próprio
+     ambiente de produção**, nunca reaproveitar a de outro ambiente
+   - `APP_URL` — a URL pública real, sem barra no fim
+   - `DB_*` — credenciais do MySQL de produção
+   - `MAIL_MAILER=smtp` + `MAIL_HOST`/`PORT`/`USERNAME`/`PASSWORD` — sem
+     isso, o convite (item 5 da spec) não sai de verdade, só grava log
+   - `LOG_LEVEL=error` (ou `warning`) — não `debug` em produção
+4. `php artisan migrate --force` (o `--force` é necessário porque
+   `APP_ENV=production` bloqueia migration interativa sem ele)
+5. `php artisan config:cache && php artisan route:cache && php artisan view:cache`
+6. Apontar o document root do servidor web para `public/`, não para a
+   raiz do projeto — é assim que o Laravel isola o resto do código de
+   acesso HTTP direto
+
+### Backup do banco
+
+A spec pede backup automático documentado, mesmo que a implementação
+fique a cargo da hospedagem — e é exatamente essa a recomendação aqui:
+não foi escrito nenhum mecanismo de backup próprio no código. A maioria
+dos provedores de MySQL gerenciado (RDS, Cloud SQL, ou o MySQL que vier
+junto do plano de hospedagem) já oferece backup automático diário
+configurável no próprio painel — ativar isso é mais confiável do que um
+`mysqldump` rodando por `cron` dentro da própria aplicação, que falha
+silenciosamente se o servidor cair no horário errado. Se o provedor
+escolhido não tiver backup gerenciado, a alternativa é um `cron` de
+`mysqldump` para armazenamento externo (S3 ou equivalente) — fora do
+escopo desta v1 implementar, mas é o próximo passo natural.
+
+## Estrutura
+
+```
+app/
+├── Enums/               UserRole, MovementType, InvitationStatus
+├── Exports/              Maatwebsite: exportação de estoque e planilha modelo
+├── Imports/              Maatwebsite: importação de produtos (upsert por SKU)
+├── Http/Middleware/       EnsureUserIsAdmin (rota /convites)
+├── Livewire/              componentes de tela (Dashboard, Products, Invitations)
+├── Mail/                   InvitationMail
+└── Models/
+    ├── Concerns/BelongsToCompany.php   trait de isolamento multi-tenant
+    └── Scopes/CompanyScope.php          global scope que filtra por empresa
+
+database/migrations/    esquema — company_id em toda tabela de negócio
+                         desde a primeira migration
+
+tests/Feature/
+├── Tenancy/            isolamento multi-tenant e permissão por papel
+├── Products/            CRUD, import/export
+├── StockMovements/      entrada/saída
+├── Invitations/         convite ponta a ponta
+└── Auth/                 auth do Breeze (ajustado pro cadastro criar empresa)
+```
+
+## Licença
+
+Ver [LICENSE.md](LICENSE.md) — software proprietário, uso privado.

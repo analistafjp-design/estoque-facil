@@ -1,3 +1,17 @@
+/* Figtree autohospedada via @fontsource — não depende de fonts.bunny.net.
+   Rodando como PWA instalado (ou offline), um link externo de fonte falha
+   silenciosamente e o app cai pra fonte do sistema sem aviso nenhum; com
+   o arquivo empacotado, a fonte carrega igual, com ou sem rede.
+   Só os subconjuntos latin/latin-ext (cobrem o português) e os pesos que o
+   tema do Breeze usa (400/500/600) — o pacote inteiro traria cirílico,
+   grego e afins à toa. */
+@import '@fontsource/figtree/latin-ext-400.css';
+@import '@fontsource/figtree/latin-400.css';
+@import '@fontsource/figtree/latin-ext-500.css';
+@import '@fontsource/figtree/latin-500.css';
+@import '@fontsource/figtree/latin-ext-600.css';
+@import '@fontsource/figtree/latin-600.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
