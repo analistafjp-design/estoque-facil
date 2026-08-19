@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProductExportController;
 use App\Http\Controllers\ProductImportTemplateController;
+use App\Livewire\Categories\CategoryIndex;
 use App\Livewire\Dashboard;
 use App\Livewire\Invitations\InvitationAccept;
 use App\Livewire\Invitations\InvitationIndex;
@@ -28,6 +29,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('produtos', ProductIndex::class)->name('products.index');
     Route::get('produtos/{product}', ProductShow::class)->name('products.show');
+
+    Route::get('categorias', CategoryIndex::class)->name('categories.index');
     Route::get('produtos-exportar', ProductExportController::class)->name('products.export');
     Route::get('produtos-modelo-planilha', ProductImportTemplateController::class)->name('products.import-template');
 

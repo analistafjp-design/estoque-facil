@@ -36,6 +36,9 @@ new class extends Component
                     <x-nav-link :href="route('products.index')" :active="request()->routeIs('products.*')" wire:navigate>
                         {{ __('Produtos') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('categories.index')" :active="request()->routeIs('categories.*')" wire:navigate>
+                        {{ __('Categorias') }}
+                    </x-nav-link>
                     @if (auth()->user()->isAdmin())
                         <x-nav-link :href="route('invitations.index')" :active="request()->routeIs('invitations.index')" wire:navigate>
                             {{ __('Convites') }}
@@ -94,6 +97,9 @@ new class extends Component
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('products.index')" :active="request()->routeIs('products.*')" wire:navigate>
                 {{ __('Produtos') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('categories.index')" :active="request()->routeIs('categories.*')" wire:navigate>
+                {{ __('Categorias') }}
             </x-responsive-nav-link>
             @if (auth()->user()->isAdmin())
                 <x-responsive-nav-link :href="route('invitations.index')" :active="request()->routeIs('invitations.index')" wire:navigate>

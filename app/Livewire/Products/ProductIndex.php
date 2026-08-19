@@ -28,6 +28,9 @@ class ProductIndex extends Component
 
     public string $filtro = ''; // '' | 'baixo' | 'sem-estoque'
 
+    /** Filtro por categoria — usado ao chegar da tela de Categorias. */
+    public string $categoriaFiltro = '';
+
     public bool $showForm = false;
 
     public ?int $editingId = null;
@@ -77,6 +80,7 @@ class ProductIndex extends Component
     {
         $filtro = (string) request()->query('filtro', '');
         $this->filtro = in_array($filtro, ['baixo', 'sem-estoque'], true) ? $filtro : '';
+        $this->categoriaFiltro = (string) request()->query('categoria', '');
     }
 
     public function updatingBusca(): void
@@ -353,6 +357,7 @@ class ProductIndex extends Component
             })
             ->when($this->filtro === 'baixo', fn ($query) => $query->abaixoDoMinimo())
             ->when($this->filtro === 'sem-estoque', fn ($query) => $query->semEstoque())
+            ->when($this->categoriaFiltro !== '', fn ($query) => $query->where('categoria', $this->categoriaFiltro))
             ->orderBy('nome')
             ->paginate(15);
 

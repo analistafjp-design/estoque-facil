@@ -78,6 +78,12 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
   linha de cabeçalho congelada, exemplos preenchidos e uma aba de
   instruções explicando cada coluna. Usá-lo é opcional — o importador
   aceita outros formatos — mas é o caminho sem surpresa
+- **Renomear categorias** (tela Categorias): planilha de ERP traz a
+  categoria como código ("500292000") porque a descrição costuma morar
+  noutra tabela que não vem na exportação. A tela lista as categorias com
+  quantos produtos e quantos itens cada uma tem, e renomear vale para
+  todos os produtos do grupo de uma vez. Renomear para um nome já
+  existente funde as duas — útil para juntar "Químicos" e "QUIMICOS"
 - **Excluir todos os produtos** (só admin, com confirmação digitada) —
   para recomeçar um cadastro que entrou errado sem desativar item a item;
   apaga também o histórico de movimentações, por isso o aviso explícito
@@ -149,7 +155,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 115 testes, cobrindo:
+comportamento é o mesmo. 121 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
@@ -164,6 +170,8 @@ comportamento é o mesmo. 115 testes, cobrindo:
   sinônimo, cabeçalho fora da primeira linha e formato numérico variado;
 - **modelo de planilha** — ida e volta: baixar o modelo e reimportá-lo
   funciona sem ajuste, e a aba de instruções não vira produto;
+- **renomear categoria** — atinge todos os produtos do grupo, funde ao
+  renomear para nome existente e nunca alcança outra empresa;
 - **exclusão em massa** — confirmação obrigatória, restrita a admin e
   incapaz de tocar em dado de outra empresa;
 - **proxy/HTTPS** — garante que atrás do balanceador da hospedagem a URL
