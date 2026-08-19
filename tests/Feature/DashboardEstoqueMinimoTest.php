@@ -49,7 +49,7 @@ it('não mostra o aviso quando os mínimos estão definidos', function () {
         ->assertDontSee('sem estoque mínimo definido');
 });
 
-it('aponta como estoque baixo apenas quem está no ou abaixo do mínimo', function () {
+it('aponta abaixo do mínimo quem está no ou abaixo do mínimo definido', function () {
     Product::factory()->create([
         'company_id' => $this->company->id,
         'nome' => 'No limite',
@@ -73,13 +73,14 @@ it('aponta como estoque baixo apenas quem está no ou abaixo do mínimo', functi
 
     Livewire::actingAs($this->user)
         ->test(Dashboard::class)
-        ->assertViewHas('totalEstoqueBaixo', 2)
-        ->assertSee('No limite')
-        ->assertSee('Abaixo')
-        ->assertDontSee('Folgado');
+        ->assertViewHas('abaixoDoMinimo', 2)
+        // Verifica a lista de alerta em si, e não a página inteira:
+        // "Folgado" aparece legitimamente em "Cadastrados recentemente",
+        // então assertDontSee no HTML todo testaria a coisa errada.
+        ->assertViewHas('precisaAtencao', fn ($produtos) => $produtos->pluck('nome')->all() === ['Abaixo', 'No limite']);
 });
 
-it('com mínimo zero, só produto zerado entra no alerta', function () {
+it('com mínimo zero, o produto zerado conta como sem estoque e não como abaixo do mínimo', function () {
     // Reproduz o cadastro do usuário: milhares de produtos com saldo e
     // mínimo zero, e só dois zerados.
     Product::factory()->count(5)->create([
@@ -97,5 +98,8 @@ it('com mínimo zero, só produto zerado entra no alerta', function () {
     Livewire::actingAs($this->user)
         ->test(Dashboard::class)
         ->assertViewHas('totalProdutos', 7)
-        ->assertViewHas('totalEstoqueBaixo', 2);
+        // Zerado é "sem estoque". Chamar isso de "abaixo do mínimo" seria
+        // enganoso: não existe mínimo definido para comparar.
+        ->assertViewHas('semEstoque', 2)
+        ->assertViewHas('abaixoDoMinimo', 0);
 });

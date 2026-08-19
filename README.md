@@ -83,8 +83,13 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
   apaga também o histórico de movimentações, por isso o aviso explícito
 - Exportação do estoque atual para Excel
 - Histórico de movimentações por produto (quem, quando, tipo, quantidade)
-- Dashboard: total de produtos, produtos com estoque baixo, movimentações
-  recentes
+- Dashboard com quatro indicadores (total de produtos, **sem estoque**,
+  **abaixo do mínimo**, itens em estoque), distribuição do saldo por faixa,
+  principais categorias, lista do que precisa de atenção e movimentações
+  recentes. "Sem estoque" e "abaixo do mínimo" são contas separadas: com
+  mínimo zero — o padrão de quem importou planilha sem essa coluna — as
+  duas seriam o mesmo conjunto, e o mesmo produto apareceria como dois
+  problemas. Cadastro vazio mostra o próximo passo em vez de quatro zeros
 
 **Fora de escopo por decisão, não por esquecimento:** integração com
 marketplace, app mobile nativo, múltiplas filiais, relatórios com

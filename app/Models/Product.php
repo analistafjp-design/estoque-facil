@@ -52,4 +52,26 @@ class Product extends Model
     {
         return $query->whereColumn('quantidade_atual', '<=', 'estoque_minimo');
     }
+
+    /** Sem nenhuma unidade — precisa de reposição independente de mínimo. */
+    public function scopeSemEstoque(Builder $query): Builder
+    {
+        return $query->where('quantidade_atual', '<=', 0);
+    }
+
+    /**
+     * Abaixo do mínimo DEFINIDO (mínimo maior que zero).
+     *
+     * Diferente de estoqueBaixo(): quando o mínimo é zero — o padrão de
+     * quem importou planilha sem essa coluna — a comparação
+     * "quantidade <= mínimo" só pega produto zerado, que já é contado como
+     * "sem estoque". Separar os dois evita o mesmo produto aparecer como
+     * dois problemas distintos e deixa o alerta de mínimo significar o que
+     * o nome diz.
+     */
+    public function scopeAbaixoDoMinimo(Builder $query): Builder
+    {
+        return $query->where('estoque_minimo', '>', 0)
+            ->whereColumn('quantidade_atual', '<=', 'estoque_minimo');
+    }
 }

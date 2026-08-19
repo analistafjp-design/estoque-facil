@@ -44,14 +44,26 @@
                     ])
                 >Todos</button>
                 <button
+                    wire:click="$set('filtro', 'sem-estoque')"
+                    type="button"
+                    @class([
+                        'px-3 py-1.5 rounded-full border',
+                        'bg-red-600 text-white border-red-600' => $filtro === 'sem-estoque',
+                        'bg-white text-gray-700 border-gray-300' => $filtro !== 'sem-estoque',
+                    ])
+                >Sem estoque</button>
+                {{-- "Abaixo do mínimo" só considera produto com mínimo
+                     definido: com mínimo zero o filtro devolveria os
+                     zerados, repetindo o botão ao lado. --}}
+                <button
                     wire:click="$set('filtro', 'baixo')"
                     type="button"
                     @class([
                         'px-3 py-1.5 rounded-full border',
-                        'bg-red-600 text-white border-red-600' => $filtro === 'baixo',
+                        'bg-amber-600 text-white border-amber-600' => $filtro === 'baixo',
                         'bg-white text-gray-700 border-gray-300' => $filtro !== 'baixo',
                     ])
-                >Estoque baixo</button>
+                >Abaixo do mínimo</button>
             </div>
         </div>
 

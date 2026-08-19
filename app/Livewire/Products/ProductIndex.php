@@ -26,7 +26,7 @@ class ProductIndex extends Component
 
     public string $busca = '';
 
-    public string $filtro = ''; // '' | 'baixo'
+    public string $filtro = ''; // '' | 'baixo' | 'sem-estoque'
 
     public bool $showForm = false;
 
@@ -75,7 +75,8 @@ class ProductIndex extends Component
 
     public function mount(): void
     {
-        $this->filtro = request()->query('filtro', '') === 'baixo' ? 'baixo' : '';
+        $filtro = (string) request()->query('filtro', '');
+        $this->filtro = in_array($filtro, ['baixo', 'sem-estoque'], true) ? $filtro : '';
     }
 
     public function updatingBusca(): void
@@ -350,7 +351,8 @@ class ProductIndex extends Component
                 $termo = '%'.$this->busca.'%';
                 $query->where(fn ($q) => $q->where('nome', 'like', $termo)->orWhere('sku', 'like', $termo));
             })
-            ->when($this->filtro === 'baixo', fn ($query) => $query->estoqueBaixo())
+            ->when($this->filtro === 'baixo', fn ($query) => $query->abaixoDoMinimo())
+            ->when($this->filtro === 'sem-estoque', fn ($query) => $query->semEstoque())
             ->orderBy('nome')
             ->paginate(15);
 
