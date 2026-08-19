@@ -125,6 +125,12 @@ comportamento é o mesmo. 69 testes, cobrindo:
 
 ## Deploy
 
+Guias passo a passo prontos para duas plataformas específicas:
+[Render](docs/DEPLOY_RENDER.md) e [Railway](docs/DEPLOY_RAILWAY.md) —
+ambos usam o `Dockerfile` já incluído no repositório, não precisa
+escrever configuração de deploy do zero. A seção abaixo é o passo a
+passo genérico, host-agnóstico, para quem for usar outra plataforma.
+
 Qualquer host que rode PHP 8.4+ com extensões padrão do Laravel
 (`pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`,
 `fileinfo`, `gd`, `zip` — para o Maatwebsite/Excel) e um MySQL 8 acessível
@@ -190,6 +196,12 @@ tests/Feature/
 ├── StockMovements/      entrada/saída
 ├── Invitations/         convite ponta a ponta
 └── Auth/                 auth do Breeze (ajustado pro cadastro criar empresa)
+
+Dockerfile               imagem de produção (Nginx + PHP-FPM via supervisord)
+docker/                  config de suporte do Dockerfile (nginx, supervisord,
+                         entrypoint.sh, php.ini de produção)
+docs/DEPLOY_RENDER.md    passo a passo de deploy no Render
+docs/DEPLOY_RAILWAY.md   passo a passo de deploy no Railway
 ```
 
 ## Licença

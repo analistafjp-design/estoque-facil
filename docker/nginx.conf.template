@@ -1,0 +1,43 @@
+worker_processes auto;
+pid /var/run/nginx.pid;
+error_log /dev/stderr warn;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    sendfile      on;
+    keepalive_timeout 65;
+    client_max_body_size 20M;
+
+    access_log /dev/stdout;
+
+    server {
+        # ${PORT} é substituída pelo entrypoint via envsubst — Render e
+        # Railway definem essa variável em runtime, não dá pra fixar.
+        listen ${PORT};
+        server_name _;
+        root /var/www/html/public;
+        index index.php;
+
+        location / {
+            try_files $uri $uri/ /index.php?$query_string;
+        }
+
+        location ~ \.php$ {
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_index index.php;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+        }
+
+        # Bloqueia acesso direto a arquivos ocultos (.env, .git etc.),
+        # exceto .well-known (necessário para alguns desafios de certificado).
+        location ~ /\.(?!well-known).* {
+            deny all;
+        }
+    }
+}
