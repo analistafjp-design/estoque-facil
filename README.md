@@ -63,10 +63,17 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
     uma linha por depósito/filial, e como a v1 não tem filiais o saldo
     do produto é a soma — testado com um relatório real de 16.777
     linhas, que virou 3.537 produtos em ~26s;
+  - só a **primeira aba** é lida — abas de apoio (instruções, resumo,
+    glossário) não viram produto;
   - só o nome é obrigatório; sem coluna de SKU o produto é identificado
     pelo nome e recebe um código gerado. Reimportar atualiza em vez de
-    duplicar. Há também um modelo pronto para download (tela Produtos →
-    "Modelo de planilha"), mas usá-lo é opcional
+    duplicar
+- **Modelo de planilha** para download (tela Produtos → "Modelo de
+  planilha"): formato oficial com cabeçalho legível (`Nome do produto`,
+  `Código (SKU)`, `Categoria`, `Quantidade atual`, `Estoque mínimo`),
+  linha de cabeçalho congelada, exemplos preenchidos e uma aba de
+  instruções explicando cada coluna. Usá-lo é opcional — o importador
+  aceita outros formatos — mas é o caminho sem surpresa
 - **Excluir todos os produtos** (só admin, com confirmação digitada) —
   para recomeçar um cadastro que entrou errado sem desativar item a item;
   apaga também o histórico de movimentações, por isso o aviso explícito
@@ -133,7 +140,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 108 testes, cobrindo:
+comportamento é o mesmo. 111 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
@@ -146,6 +153,8 @@ comportamento é o mesmo. 108 testes, cobrindo:
 - **convite** — envio, aceite, expiração, rate limiting;
 - **import/export** de planilha, incluindo detecção de coluna por
   sinônimo, cabeçalho fora da primeira linha e formato numérico variado;
+- **modelo de planilha** — ida e volta: baixar o modelo e reimportá-lo
+  funciona sem ajuste, e a aba de instruções não vira produto;
 - **exclusão em massa** — confirmação obrigatória, restrita a admin e
   incapaz de tocar em dado de outra empresa;
 - **proxy/HTTPS** — garante que atrás do balanceador da hospedagem a URL

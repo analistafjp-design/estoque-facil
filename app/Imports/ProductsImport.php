@@ -52,6 +52,15 @@ class ProductsImport implements ToCollection
      */
     private array $vistos = [];
 
+    /**
+     * O Excel chama collection() uma vez por ABA. Só a primeira interessa:
+     * sem essa trava, a aba "Instruções" do modelo viraria produto, e o
+     * mesmo aconteceria com qualquer planilha que tenha abas de apoio
+     * (resumo, glossário) — comum em arquivo de ERP. A tela de conferência
+     * também analisa a primeira aba, então as duas pontas concordam.
+     */
+    private bool $primeiraAbaProcessada = false;
+
     /** @var array<string, int> campo => índice da coluna reconhecida */
     public array $colunasDetectadas = [];
 
@@ -68,6 +77,12 @@ class ProductsImport implements ToCollection
 
     public function collection(Collection $linhas): void
     {
+        if ($this->primeiraAbaProcessada) {
+            return;
+        }
+
+        $this->primeiraAbaProcessada = true;
+
         if ($this->mapaEscolhido !== null && $this->linhaCabecalho !== null) {
             $mapa = $this->mapaEscolhido;
             $indiceCabecalho = $this->linhaCabecalho;

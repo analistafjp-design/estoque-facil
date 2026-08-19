@@ -1,6 +1,5 @@
 <?php
 
-use App\Exports\ProductImportTemplateExport;
 use App\Exports\ProductsExport;
 use App\Imports\ProductsImport;
 use App\Livewire\Products\ProductIndex;
@@ -39,11 +38,10 @@ test('exportação inclui só produtos da empresa logada', function () {
         ->and($nomes)->not->toContain('Produto de outra empresa');
 });
 
-test('planilha modelo tem as colunas que a importação espera', function () {
-    $cabecalho = (new ProductImportTemplateExport)->headings();
-
-    expect($cabecalho)->toBe(['nome', 'sku', 'categoria', 'quantidade_atual', 'estoque_minimo']);
-});
+// A cobertura do modelo vive em ModeloDePlanilhaTest: em vez de comparar
+// a lista de cabeçalhos (que só prova que o array não mudou), ele baixa o
+// modelo e reimporta, provando que o formato oficial funciona de ponta a
+// ponta.
 
 test('importar planilha pela tela cria produtos novos', function () {
     // Sem Excel::fake() de propósito aqui: o valor deste teste é provar
