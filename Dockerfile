@@ -14,12 +14,19 @@ FROM composer:2 AS vendor
 WORKDIR /app
 
 COPY composer.json composer.lock ./
+# --ignore-platform-reqs: a imagem composer:2 não tem gd/intl/pdo_mysql
+# instaladas (ela só resolve e baixa pacotes, não roda o app) — sem essa
+# flag o Composer barra a instalação porque phpoffice/phpspreadsheet
+# exige ext-gd e o ambiente ATUAL não tem. A imagem final (estágio 3) já
+# instala gd de verdade via docker-php-ext-install, então ignorar aqui é
+# seguro: o requisito é satisfeito onde o código realmente roda.
 RUN composer install \
         --no-dev \
         --no-scripts \
         --no-autoloader \
         --prefer-dist \
-        --no-interaction
+        --no-interaction \
+        --ignore-platform-reqs
 
 COPY . .
 # --no-scripts aqui também: o hook post-autoload-dump do Laravel roda
