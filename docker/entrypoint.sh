@@ -21,6 +21,9 @@ if [ -z "${APP_KEY:-}" ]; then
     exit 1
 fi
 
+echo "==> Descobrindo pacotes (pulado no build, roda aqui onde as extensões PHP corretas existem)..."
+php artisan package:discover --ansi
+
 echo "==> Rodando migrations..."
 php artisan migrate --force
 

@@ -22,7 +22,12 @@ RUN composer install \
         --no-interaction
 
 COPY . .
-RUN composer dump-autoload --optimize --no-dev --classmap-authoritative
+# --no-scripts aqui também: o hook post-autoload-dump do Laravel roda
+# "artisan package:discover", que depende de extensões PHP (pdo_mysql,
+# gd, intl...) que só existem na imagem final (estágio 3), não nesta
+# imagem composer:2. O discovery acontece sozinho, sem custo extra, no
+# primeiro boot real do container (dentro do entrypoint.sh).
+RUN composer dump-autoload --optimize --no-dev --classmap-authoritative --no-scripts
 
 # ---------- Estágio 2: assets do frontend (Vite) ----------
 FROM node:20-alpine AS assets
@@ -38,10 +43,28 @@ RUN npm run build
 # ---------- Estágio 3: imagem final ----------
 FROM php:8.4-fpm-alpine AS runtime
 
+# Libs de runtime (ficam na imagem final) separadas dos headers de
+# desenvolvimento + toolchain de compilação (só existem durante o build,
+# removidos no fim do RUN — "virtual .build-deps" é o pacote apk
+# temporário que agrupa tudo isso pra dar apk del de uma vez).
+#
+# $PHPIZE_DEPS é uma env var já definida pela imagem base php:*-alpine
+# com a lista de pacotes (gcc, g++, make, autoconf etc.) necessários pro
+# phpize/make que o docker-php-ext-install roda por baixo dos panos —
+# sem isso o compilador nem existe na imagem e o RUN falha na hora de
+# compilar a primeira extensão.
 RUN apk add --no-cache \
         nginx \
         supervisor \
         gettext \
+        icu-libs \
+        libzip \
+        oniguruma \
+        libpng \
+        freetype \
+        libjpeg-turbo \
+    && apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
         icu-dev \
         libzip-dev \
         oniguruma-dev \
@@ -50,7 +73,7 @@ RUN apk add --no-cache \
         libjpeg-turbo-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j"$(nproc)" pdo_mysql mbstring zip gd intl opcache \
-    && apk del --no-cache icu-dev libzip-dev oniguruma-dev libpng-dev freetype-dev libjpeg-turbo-dev
+    && apk del --no-cache .build-deps
 
 WORKDIR /var/www/html
 
@@ -64,8 +87,12 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/php-prod.ini /usr/local/etc/php/conf.d/99-estoque-facil.ini
 
+# Sem chaves {a,b,c} de propósito: é expansão de Bash, e o shell padrão
+# do RUN nessa imagem Alpine é o ash (busybox), que não expande isso —
+# criaria uma única pasta chamada literalmente "{cache,sessions,views}"
+# em vez de três pastas separadas.
 RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache \
+    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
     && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Render/Railway injetam a porta real via $PORT em runtime; 8080 é só o
