@@ -9,7 +9,12 @@ use App\Livewire\Products\ProductIndex;
 use App\Livewire\Products\ProductShow;
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'welcome');
+// A raiz não tem página de marketing: este é um app interno de empresa,
+// quem chega aqui ou já usa o sistema ou vai logar. Manda direto pro
+// lugar certo em vez de servir uma landing page que ninguém leria.
+Route::get('/', fn () => redirect()->route(
+    auth()->check() ? 'dashboard' : 'login'
+));
 
 // Aceitar convite é uma rota "guest": quem clica no link do e-mail ainda
 // não tem sessão nenhuma. O token na URL é a própria autenticação desse
