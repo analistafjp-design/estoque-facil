@@ -207,3 +207,35 @@ it('converte formatos numéricos variados', function (mixed $entrada, int $esper
     [42, 42],
     [7.4, 7],
 ]);
+
+it('explica em português quando o arquivo ainda não chegou', function () {
+    // Cenário real: usuário clica em Importar antes do upload terminar
+    // (conexão lenta). A propriedade chega vazia, e a mensagem precisa
+    // dizer o que fazer em vez do "field is required" padrão em inglês.
+    Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->call('importar')
+        ->assertHasErrors(['arquivoImportacao' => 'required']);
+
+    $erro = Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->call('importar')
+        ->errors()
+        ->first('arquivoImportacao');
+
+    expect($erro)->toContain('aguarde o envio')
+        ->and($erro)->not->toContain('field is required');
+});
+
+it('recusa arquivo que não é planilha, com mensagem em português', function () {
+    $naoPlanilha = UploadedFile::fake()->createWithContent('foto.png', 'conteudo qualquer');
+
+    $erro = Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $naoPlanilha)
+        ->call('importar')
+        ->errors()
+        ->first('arquivoImportacao');
+
+    expect($erro)->toContain('.xlsx');
+});

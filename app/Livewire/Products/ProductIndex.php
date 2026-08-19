@@ -117,8 +117,19 @@ class ProductIndex extends Component
 
     public function importar(): void
     {
+        // Mensagens explícitas em português: a padrão do Laravel sairia
+        // como "The arquivo importacao field is required", que além de
+        // inglês nomeia a propriedade interna e não diz ao usuário o que
+        // fazer. O caso "required" aqui quase nunca é "esqueci de escolher"
+        // — é ter clicado antes do upload terminar, então a mensagem
+        // precisa apontar justamente para isso.
         $this->validate([
             'arquivoImportacao' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
+        ], [
+            'arquivoImportacao.required' => 'Escolha uma planilha e aguarde o envio terminar antes de importar.',
+            'arquivoImportacao.file' => 'O envio do arquivo não foi concluído. Escolha a planilha novamente.',
+            'arquivoImportacao.mimes' => 'Formato não suportado. Envie um arquivo .xlsx, .xls ou .csv.',
+            'arquivoImportacao.max' => 'A planilha passa de 5 MB. Divida em arquivos menores e importe um por vez.',
         ]);
 
         $importacao = new ProductsImport;

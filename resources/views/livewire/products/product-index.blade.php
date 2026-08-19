@@ -208,13 +208,29 @@
 
             <div class="mt-4">
                 <input type="file" wire:model="arquivoImportacao" accept=".xlsx,.xls,.csv" class="block w-full text-sm text-gray-700">
-                <div wire:loading wire:target="arquivoImportacao" class="mt-1 text-xs text-gray-500">Enviando arquivo...</div>
+
+                {{-- O arquivo sobe ao ser escolhido, ANTES de clicar em Importar.
+                     Numa conexão lenta isso leva alguns segundos, e sem este
+                     aviso (mais o botão desabilitado abaixo) dá pra clicar em
+                     Importar antes do envio terminar — o servidor ainda não
+                     teria o arquivo e responderia "campo obrigatório", que não
+                     explica nada pra quem acabou de escolher o arquivo. --}}
+                <div wire:loading wire:target="arquivoImportacao" class="mt-2 text-xs text-gray-600">
+                    Enviando arquivo... aguarde para importar.
+                </div>
+
+                <div wire:loading.remove wire:target="arquivoImportacao">
+                    @if ($arquivoImportacao)
+                        <div class="mt-2 text-xs text-green-700">Arquivo pronto para importar.</div>
+                    @endif
+                </div>
+
                 <x-input-error :messages="$errors->get('arquivoImportacao')" class="mt-2" />
             </div>
 
             <div class="mt-6 flex justify-end gap-3">
                 <x-secondary-button type="button" x-on:click="$wire.showImport = false">Cancelar</x-secondary-button>
-                <x-primary-button type="submit" wire:loading.attr="disabled" wire:target="importar">Importar</x-primary-button>
+                <x-primary-button type="submit" wire:loading.attr="disabled" wire:target="importar, arquivoImportacao">Importar</x-primary-button>
             </div>
         </form>
     </x-wire-modal>
