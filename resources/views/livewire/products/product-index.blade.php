@@ -13,6 +13,12 @@
                 <button wire:click="$set('showImport', true)" type="button" class="inline-flex items-center px-3 py-2 bg-white border border-gray-300 rounded-md text-xs font-semibold uppercase tracking-widest text-gray-700 hover:bg-gray-50">
                     Importar Excel
                 </button>
+                @if (auth()->user()->isAdmin())
+                    <button wire:click="$set('showExcluirTodos', true)" type="button"
+                            class="inline-flex items-center px-3 py-2 bg-white border border-red-300 rounded-md text-xs font-semibold uppercase tracking-widest text-red-700 hover:bg-red-50">
+                        Excluir todos
+                    </button>
+                @endif
                 <button wire:click="create" type="button" class="inline-flex items-center px-4 py-2 bg-gray-900 border border-transparent rounded-md text-xs font-semibold uppercase tracking-widest text-white hover:bg-gray-700">
                     Novo produto
                 </button>
@@ -319,5 +325,41 @@
                 </x-primary-button>
             </div>
         </form>
+    </x-wire-modal>
+
+    {{-- Exclusão em massa: destrutiva de verdade (não é o "desativar" do
+         CRUD, que preserva histórico). Existe para desfazer importação que
+         entrou errada sem ter que mexer item por item. --}}
+    <x-wire-modal wireShow="$wire.showExcluirTodos">
+        <div class="p-6">
+            <h2 class="text-lg font-medium text-gray-900">Excluir todos os produtos</h2>
+
+            <div class="mt-3 rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-800">
+                <p class="font-semibold">Esta ação não pode ser desfeita.</p>
+                <p class="mt-1">
+                    Todos os produtos desta empresa serão apagados de vez, junto com
+                    <strong>todo o histórico de movimentações</strong> — entradas e saídas
+                    lançadas também somem. Use para recomeçar um cadastro que entrou errado.
+                </p>
+            </div>
+
+            <div class="mt-4">
+                <label for="confirmacaoExclusao" class="block text-sm text-gray-700">
+                    Para confirmar, digite <strong>EXCLUIR</strong>:
+                </label>
+                <input id="confirmacaoExclusao" type="text" wire:model="confirmacaoExclusao"
+                       autocomplete="off"
+                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500">
+                <x-input-error :messages="$errors->get('confirmacaoExclusao')" class="mt-2" />
+            </div>
+
+            <div class="mt-6 flex justify-end gap-3">
+                <x-secondary-button type="button" x-on:click="$wire.showExcluirTodos = false">Cancelar</x-secondary-button>
+                <button wire:click="excluirTodos" type="button" wire:loading.attr="disabled" wire:target="excluirTodos"
+                        class="inline-flex items-center px-4 py-2 bg-red-600 border border-transparent rounded-md text-xs font-semibold uppercase tracking-widest text-white hover:bg-red-700 disabled:opacity-50">
+                    Excluir tudo
+                </button>
+            </div>
+        </div>
     </x-wire-modal>
 </div>

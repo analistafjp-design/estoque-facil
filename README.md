@@ -63,6 +63,9 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
     pelo nome e recebe um código gerado. Reimportar atualiza em vez de
     duplicar. Há também um modelo pronto para download (tela Produtos →
     "Modelo de planilha"), mas usá-lo é opcional
+- **Excluir todos os produtos** (só admin, com confirmação digitada) —
+  para recomeçar um cadastro que entrou errado sem desativar item a item;
+  apaga também o histórico de movimentações, por isso o aviso explícito
 - Exportação do estoque atual para Excel
 - Histórico de movimentações por produto (quem, quando, tipo, quantidade)
 - Dashboard: total de produtos, produtos com estoque baixo, movimentações
@@ -126,7 +129,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 99 testes, cobrindo:
+comportamento é o mesmo. 105 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
@@ -139,6 +142,8 @@ comportamento é o mesmo. 99 testes, cobrindo:
 - **convite** — envio, aceite, expiração, rate limiting;
 - **import/export** de planilha, incluindo detecção de coluna por
   sinônimo, cabeçalho fora da primeira linha e formato numérico variado;
+- **exclusão em massa** — confirmação obrigatória, restrita a admin e
+  incapaz de tocar em dado de outra empresa;
 - **proxy/HTTPS** — garante que atrás do balanceador da hospedagem a URL
   dos assets sai em `https` (senão o navegador bloqueia o CSS).
 

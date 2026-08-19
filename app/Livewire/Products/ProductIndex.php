@@ -5,8 +5,10 @@ namespace App\Livewire\Products;
 use App\Imports\ProductsImport;
 use App\Imports\Support\AnalisadorDePlanilha;
 use App\Models\Product;
+use App\Models\StockMovement;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -65,6 +67,11 @@ class ProductIndex extends Component
     public int $linhaCabecalho = 0;
 
     public int $totalLinhasPlanilha = 0;
+
+    public bool $showExcluirTodos = false;
+
+    /** Confirmação digitada — evita apagar o cadastro inteiro num clique torto. */
+    public string $confirmacaoExclusao = '';
 
     public function mount(): void
     {
@@ -240,6 +247,55 @@ class ProductIndex extends Component
         }
 
         return true;
+    }
+
+    /**
+     * Apaga TODOS os produtos da empresa, de vez — inclusive as
+     * movimentações, que o banco protege com restrictOnDelete e que
+     * impediriam a exclusão do produto.
+     *
+     * Existe para desfazer importação que entrou errada: sem isso o
+     * usuário teria que desativar centenas de itens um a um. É destrutivo
+     * de propósito (não é o "desativar" do CRUD, que preserva histórico),
+     * então exige ser admin e digitar a confirmação.
+     */
+    public function excluirTodos(): void
+    {
+        abort_unless(Auth::user()->isAdmin(), 403);
+
+        if (mb_strtoupper(trim($this->confirmacaoExclusao)) !== 'EXCLUIR') {
+            $this->addError('confirmacaoExclusao', 'Digite EXCLUIR para confirmar.');
+
+            return;
+        }
+
+        $companyId = Auth::user()->company_id;
+
+        $quantidade = DB::transaction(function () use ($companyId) {
+            // Movimentações primeiro: o FK product_id é restrictOnDelete,
+            // então o banco recusaria apagar produto que tenha histórico.
+            StockMovement::withoutGlobalScopes()
+                ->where('company_id', $companyId)
+                ->delete();
+
+            // withTrashed: produto já desativado também sai, senão o SKU
+            // dele continuaria ocupando o índice único da empresa.
+            $produtos = Product::withoutGlobalScopes()
+                ->where('company_id', $companyId);
+
+            $total = (clone $produtos)->count();
+            $produtos->forceDelete();
+
+            return $total;
+        });
+
+        $this->showExcluirTodos = false;
+        $this->confirmacaoExclusao = '';
+        $this->resetPage();
+
+        session()->flash('status', $quantidade === 1
+            ? '1 produto excluído.'
+            : $quantidade.' produtos excluídos.');
     }
 
     /**
