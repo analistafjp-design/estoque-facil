@@ -228,9 +228,95 @@
                 <x-input-error :messages="$errors->get('arquivoImportacao')" class="mt-2" />
             </div>
 
+            {{-- Conferência do mapeamento: o passo que impede importar a
+                 coluna errada. A detecção automática vem pré-selecionada,
+                 mas quem decide é quem está vendo a planilha. --}}
+            @if ($conferindo)
+                <div class="mt-5 border-t border-gray-200 pt-5">
+                    <h3 class="text-sm font-semibold text-gray-900">Confira as colunas</h3>
+                    <p class="mt-1 text-xs text-gray-500">
+                        Encontramos {{ $totalLinhasPlanilha }}
+                        {{ $totalLinhasPlanilha === 1 ? 'linha' : 'linhas' }} de dados.
+                        Ajuste abaixo se alguma coluna tiver sido lida errado.
+                    </p>
+
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        @foreach ([
+                            'nome' => 'Nome do produto',
+                            'sku' => 'Código / SKU',
+                            'categoria' => 'Categoria',
+                            'quantidade_atual' => 'Quantidade',
+                            'estoque_minimo' => 'Estoque mínimo',
+                        ] as $campo => $rotulo)
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700">
+                                    {{ $rotulo }}
+                                    @if ($campo === 'nome')
+                                        <span class="text-red-600">*</span>
+                                    @endif
+                                </label>
+                                <select wire:model.live="mapa.{{ $campo }}"
+                                        class="mt-1 block w-full rounded-md border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">— não importar —</option>
+                                    @foreach ($colunasDaPlanilha as $indice => $rotuloColuna)
+                                        <option value="{{ $indice }}">{{ $rotuloColuna }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        @endforeach
+                    </div>
+
+                    <x-input-error :messages="$errors->get('mapa.nome')" class="mt-2" />
+
+                    {{-- Prévia com o dado real: ver "1000013" na coluna Nome
+                         denuncia o mapeamento errado antes de importar, não
+                         depois de sujar o cadastro. --}}
+                    @if ($amostra)
+                        <div class="mt-4">
+                            <p class="text-xs font-medium text-gray-700">Prévia</p>
+                            <div class="mt-1 overflow-x-auto rounded-md border border-gray-200">
+                                <table class="min-w-full text-xs">
+                                    <thead class="bg-gray-50 text-gray-600">
+                                        <tr>
+                                            <th class="px-3 py-2 text-left font-medium">Nome</th>
+                                            <th class="px-3 py-2 text-left font-medium">SKU</th>
+                                            <th class="px-3 py-2 text-left font-medium">Categoria</th>
+                                            <th class="px-3 py-2 text-right font-medium">Qtd.</th>
+                                            <th class="px-3 py-2 text-right font-medium">Mín.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-100 bg-white">
+                                        @foreach ($amostra as $linha)
+                                            <tr>
+                                                @foreach (['nome', 'sku', 'categoria', 'quantidade_atual', 'estoque_minimo'] as $campo)
+                                                    @php
+                                                        $indice = $mapa[$campo] ?? '';
+                                                        $valor = $indice !== '' ? ($linha[(int) $indice] ?? null) : null;
+                                                        $alinha = in_array($campo, ['quantidade_atual', 'estoque_minimo'], true) ? 'text-right' : '';
+                                                    @endphp
+                                                    <td class="px-3 py-2 {{ $alinha }} {{ $campo === 'nome' ? 'font-medium text-gray-900' : 'text-gray-600' }}">
+                                                        {{ is_scalar($valor) ? \Illuminate\Support\Str::limit((string) $valor, 40) : '—' }}
+                                                    </td>
+                                                @endforeach
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
             <div class="mt-6 flex justify-end gap-3">
                 <x-secondary-button type="button" x-on:click="$wire.showImport = false">Cancelar</x-secondary-button>
-                <x-primary-button type="submit" wire:loading.attr="disabled" wire:target="importar, arquivoImportacao">Importar</x-primary-button>
+                {{-- :disabled (atributo bound), não @disabled: dentro de uma
+                     tag de componente Blade a diretiva não compila. --}}
+                <x-primary-button type="submit" wire:loading.attr="disabled"
+                                  wire:target="importar, arquivoImportacao"
+                                  :disabled="! $conferindo">
+                    Importar
+                </x-primary-button>
             </div>
         </form>
     </x-wire-modal>

@@ -43,17 +43,26 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
 - Lançamento de entrada/saída de estoque, com atualização automática da
   quantidade na mesma transação
 - Alerta visual quando produto atinge o estoque mínimo
-- Importação de produtos via planilha Excel **de formato livre**: as
-  colunas são reconhecidas pelo cabeçalho, por sinônimos e em qualquer
-  ordem ("Produto"/"Descrição"/"Item" → nome; "Código"/"Ref."/"SKU" →
-  código; "Estoque"/"Saldo"/"Qtd" → quantidade), ignorando acento, caixa
-  e pontuação. Aceita linhas de título antes do cabeçalho (relatório
-  exportado de ERP), colunas extras, rodapé e número em formato
-  brasileiro. Só o nome é obrigatório; sem coluna de SKU o produto é
-  identificado pelo nome e recebe um código gerado. Reimportar atualiza
-  em vez de duplicar. Há também um modelo pronto para download (tela
-  Produtos → "Modelo de planilha", ou `GET /produtos-modelo-planilha`
-  autenticado), mas usá-lo é opcional
+- Importação de produtos via planilha Excel **de formato livre**, com
+  conferência antes de gravar:
+  - as colunas são reconhecidas pelo cabeçalho, por sinônimos e em
+    qualquer ordem ("Produto"/"Descrição"/"Item" → nome;
+    "Código"/"Ref."/"SKU" → código; "Estoque"/"Saldo"/"Qtd" →
+    quantidade), ignorando acento, caixa e pontuação;
+  - o **conteúdo** das colunas desempata cabeçalho ambíguo: em
+    exportação de ERP, "Material" tanto pode ser o código quanto a
+    descrição — se a coluna só tem número, ela vira SKU e a coluna de
+    texto vira o nome;
+  - antes de importar, uma tela mostra o mapeamento detectado, deixa
+    trocar qualquer coluna e exibe uma prévia com o dado real — o
+    palpite automático nunca acerta 100% dos formatos, e ver
+    "1000013" na coluna Nome denuncia o erro antes de sujar o cadastro;
+  - aceita linhas de título antes do cabeçalho (relatório de ERP),
+    colunas extras, rodapé e número em formato brasileiro;
+  - só o nome é obrigatório; sem coluna de SKU o produto é identificado
+    pelo nome e recebe um código gerado. Reimportar atualiza em vez de
+    duplicar. Há também um modelo pronto para download (tela Produtos →
+    "Modelo de planilha"), mas usá-lo é opcional
 - Exportação do estoque atual para Excel
 - Histórico de movimentações por produto (quem, quando, tipo, quantidade)
 - Dashboard: total de produtos, produtos com estoque baixo, movimentações
@@ -117,7 +126,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 93 testes, cobrindo:
+comportamento é o mesmo. 99 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
@@ -190,7 +199,8 @@ app/
 ├── Enums/               UserRole, MovementType, InvitationStatus
 ├── Exports/              Maatwebsite: exportação de estoque e planilha modelo
 ├── Imports/              importação de planilha de formato livre
-│   └── Support/          detecção de colunas por sinônimo e leitura de número
+│   └── Support/          detecção de coluna (cabeçalho + conteúdo), leitura
+│                         de número e análise para a tela de conferência
 ├── Http/Middleware/       EnsureUserIsAdmin (rota /convites)
 ├── Livewire/              componentes de tela (Dashboard, Products, Invitations)
 ├── Mail/                   InvitationMail

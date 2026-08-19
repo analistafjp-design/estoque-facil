@@ -37,33 +37,56 @@ class ProductsImport implements ToCollection
     /** @var array<string, int> campo => índice da coluna reconhecida */
     public array $colunasDetectadas = [];
 
+    /**
+     * @param  array<string, int>|null  $mapaEscolhido  mapeamento confirmado
+     *   pelo usuário na tela de conferência. Quando informado, tem
+     *   precedência sobre a detecção automática — é ele quem está olhando
+     *   a planilha, o palpite do sistema é só ponto de partida.
+     */
+    public function __construct(
+        private ?array $mapaEscolhido = null,
+        private ?int $linhaCabecalho = null,
+    ) {}
+
     public function collection(Collection $linhas): void
     {
-        $mapeador = new MapeadorDeColunas;
+        if ($this->mapaEscolhido !== null && $this->linhaCabecalho !== null) {
+            $mapa = $this->mapaEscolhido;
+            $indiceCabecalho = $this->linhaCabecalho;
+        } else {
+            $cabecalho = (new MapeadorDeColunas)->localizarCabecalho($linhas);
 
-        $cabecalho = $mapeador->localizarCabecalho($linhas);
+            if ($cabecalho === null) {
+                throw new RuntimeException(
+                    'Não foi possível identificar as colunas da planilha. '
+                    .'É preciso haver uma linha de cabeçalho com pelo menos uma '
+                    .'coluna de nome do produto (ex.: "Nome", "Produto", '
+                    .'"Descrição" ou "Item").'
+                );
+            }
 
-        if ($cabecalho === null) {
+            $mapa = $cabecalho['mapa'];
+            $indiceCabecalho = $cabecalho['indice'];
+        }
+
+        if (! isset($mapa['nome'])) {
             throw new RuntimeException(
-                'Não foi possível identificar as colunas da planilha. '
-                .'É preciso haver uma linha de cabeçalho com pelo menos uma '
-                .'coluna de nome do produto (ex.: "Nome", "Produto", '
-                .'"Descrição" ou "Item").'
+                'Escolha qual coluna da planilha tem o nome do produto.'
             );
         }
 
-        $this->colunasDetectadas = $cabecalho['mapa'];
+        $this->colunasDetectadas = $mapa;
         $companyId = Auth::user()->company_id;
 
         foreach ($linhas as $posicao => $linha) {
             // Pula tudo até o cabeçalho, inclusive (títulos, datas, etc.).
-            if ($posicao <= $cabecalho['indice']) {
+            if ($posicao <= $indiceCabecalho) {
                 continue;
             }
 
             $this->processarLinha(
                 is_array($linha) ? $linha : $linha->toArray(),
-                $cabecalho['mapa'],
+                $mapa,
                 $companyId
             );
         }

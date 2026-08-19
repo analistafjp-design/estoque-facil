@@ -149,14 +149,24 @@ it('ignora linhas de rodapé sem nome sem abortar a importação', function () {
     expect(Product::withoutGlobalScopes()->where('company_id', $this->company->id)->count())->toBe(1);
 });
 
-it('avisa com mensagem clara quando não há coluna de nome', function () {
+it('pede para escolher a coluna de nome quando não reconhece nenhuma', function () {
+    // Sem cabeçalho reconhecível o arquivo não é recusado: a conferência
+    // abre assim mesmo, com as colunas disponíveis, e o usuário indica qual
+    // é o nome. Recusar seria pior — a planilha pode estar perfeita, só com
+    // cabeçalho que o sistema não conhece.
     $arquivo = planilha([
         ['Valor', 'Data'],
         [100, '01/01/2026'],
     ], 'sem-nome.xlsx');
 
-    importar($arquivo, $this->user)
-        ->assertHasErrors('arquivoImportacao');
+    $componente = Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo);
+
+    expect($componente->get('conferindo'))->toBeTrue()
+        ->and($componente->get('mapa')['nome'])->toBe('');
+
+    $componente->call('importar')->assertHasErrors('mapa.nome');
 
     expect(Product::withoutGlobalScopes()->where('company_id', $this->company->id)->count())->toBe(0);
 });
@@ -212,17 +222,15 @@ it('explica em português quando o arquivo ainda não chegou', function () {
     // Cenário real: usuário clica em Importar antes do upload terminar
     // (conexão lenta). A propriedade chega vazia, e a mensagem precisa
     // dizer o que fazer em vez do "field is required" padrão em inglês.
-    Livewire::actingAs($this->user)
-        ->test(ProductIndex::class)
-        ->call('importar')
-        ->assertHasErrors(['arquivoImportacao' => 'required']);
-
     $erro = Livewire::actingAs($this->user)
         ->test(ProductIndex::class)
         ->call('importar')
         ->errors()
         ->first('arquivoImportacao');
 
+    // Asserção pela MENSAGEM, não pelo nome da regra: o error bag é
+    // reposto à mão em validarArquivo(), e nesse caminho o metadado da
+    // regra não sobrevive — a mensagem, que é o que o usuário lê, sim.
     expect($erro)->toContain('aguarde o envio')
         ->and($erro)->not->toContain('field is required');
 });
@@ -238,4 +246,87 @@ it('recusa arquivo que não é planilha, com mensagem em português', function (
         ->first('arquivoImportacao');
 
     expect($erro)->toContain('.xlsx');
+});
+
+/**
+ * Regressão do caso real que sujou o cadastro do usuário: exportação de
+ * ERP onde "Material" é o CÓDIGO (1000013) e a descrição está noutra
+ * coluna. Só pelo nome do cabeçalho, "Material" parece nome de produto —
+ * é o conteúdo (coluna 100% numérica) que denuncia.
+ */
+it('não usa coluna de código como nome, mesmo com cabeçalho enganoso', function () {
+    $arquivo = planilha([
+        ['Material', 'Texto breve material', 'Grp.mercadorias', 'Estoque disponivel', 'Estoque minimo'],
+        [1000013, 'PARAFUSO SEXTAVADO M8', 100201000, 250, 50],
+        [1000024, 'PORCA SEXTAVADA M8', 100201000, 180, 40],
+    ], 'sap.xlsx');
+
+    $componente = Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo);
+
+    // A coluna numérica virou SKU; a descrição virou nome.
+    expect($componente->get('mapa')['nome'])->toBe('1')
+        ->and($componente->get('mapa')['sku'])->toBe('0');
+
+    $componente->call('importar')->assertHasNoErrors();
+
+    $produto = Product::withoutGlobalScopes()->where('sku', '1000013')->first();
+    expect($produto->nome)->toBe('PARAFUSO SEXTAVADO M8')
+        ->and($produto->quantidade_atual)->toBe(250);
+});
+
+it('abre a conferência com colunas, prévia e total de linhas', function () {
+    $arquivo = planilha([
+        ['Produto', 'Qtd'],
+        ['Caneta', 10],
+        ['Lápis', 20],
+    ], 'conferencia.xlsx');
+
+    $componente = Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo);
+
+    expect($componente->get('conferindo'))->toBeTrue()
+        ->and($componente->get('colunasDaPlanilha'))->toBe([0 => 'Produto', 1 => 'Qtd'])
+        ->and($componente->get('totalLinhasPlanilha'))->toBe(2)
+        ->and($componente->get('amostra'))->toHaveCount(2);
+});
+
+it('respeita o mapeamento corrigido à mão pelo usuário', function () {
+    // Detecção automática colocaria "Referencia" como nome; o usuário
+    // corrige para a segunda coluna antes de importar.
+    $arquivo = planilha([
+        ['Referencia', 'Especificacao tecnica', 'Qtd'],
+        ['ABC-9', 'Cabo flexível 2,5mm', 44],
+    ], 'manual.xlsx');
+
+    Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo)
+        ->set('mapa.nome', '1')
+        ->set('mapa.sku', '0')
+        ->set('mapa.quantidade_atual', '2')
+        ->call('importar')
+        ->assertHasNoErrors();
+
+    $produto = Product::withoutGlobalScopes()->where('sku', 'ABC-9')->first();
+    expect($produto->nome)->toBe('Cabo flexível 2,5mm')
+        ->and($produto->quantidade_atual)->toBe(44);
+});
+
+it('exige que o usuário escolha a coluna de nome', function () {
+    $arquivo = planilha([
+        ['Produto', 'Qtd'],
+        ['Caneta', 10],
+    ], 'sem-nome-escolhido.xlsx');
+
+    Livewire::actingAs($this->user)
+        ->test(ProductIndex::class)
+        ->set('arquivoImportacao', $arquivo)
+        ->set('mapa.nome', '')
+        ->call('importar')
+        ->assertHasErrors('mapa.nome');
+
+    expect(Product::withoutGlobalScopes()->where('company_id', $this->company->id)->count())->toBe(0);
 });

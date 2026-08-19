@@ -3,6 +3,7 @@
 namespace App\Livewire\Products;
 
 use App\Imports\ProductsImport;
+use App\Imports\Support\AnalisadorDePlanilha;
 use App\Models\Product;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -11,8 +12,10 @@ use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
+use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
+use Throwable;
 
 #[Layout('layouts.app')]
 class ProductIndex extends Component
@@ -40,6 +43,28 @@ class ProductIndex extends Component
     public bool $showImport = false;
 
     public $arquivoImportacao = null;
+
+    /**
+     * Estado do passo de conferência do mapeamento. A detecção automática
+     * é só um palpite: quem confirma qual coluna é qual é o usuário, que
+     * está com a planilha à vista. Sem esse passo, um cabeçalho ambíguo
+     * ("Material" = código no SAP, = descrição em outros) enche o cadastro
+     * de produto chamado "1000013" e só se descobre depois.
+     */
+    public bool $conferindo = false;
+
+    /** @var array<int, string> índice da coluna => rótulo do cabeçalho */
+    public array $colunasDaPlanilha = [];
+
+    /** @var array<string, string> campo => índice da coluna (string por vir de <select>) */
+    public array $mapa = [];
+
+    /** @var list<array<int, mixed>> primeiras linhas, para o usuário ver o dado real */
+    public array $amostra = [];
+
+    public int $linhaCabecalho = 0;
+
+    public int $totalLinhasPlanilha = 0;
 
     public function mount(): void
     {
@@ -115,39 +140,106 @@ class ProductIndex extends Component
         session()->flash('status', 'Produto desativado.');
     }
 
+    /**
+     * Assim que o upload termina, lê a planilha e monta a conferência —
+     * sem esperar clique, porque conferir o mapeamento É o passo, não um
+     * extra opcional.
+     */
+    public function updatedArquivoImportacao(): void
+    {
+        $this->resetErrorBag('arquivoImportacao');
+        $this->conferindo = false;
+
+        if (! $this->validarArquivo()) {
+            return;
+        }
+
+        try {
+            $analise = (new AnalisadorDePlanilha)->analisar($this->arquivoImportacao->getRealPath());
+        } catch (Throwable $e) {
+            $this->addError('arquivoImportacao', 'Não foi possível ler a planilha: '.$e->getMessage());
+
+            return;
+        }
+
+        $this->colunasDaPlanilha = $analise['colunas'];
+        $this->amostra = $analise['amostra'];
+        $this->linhaCabecalho = $analise['linhaCabecalho'];
+        $this->totalLinhasPlanilha = $analise['totalLinhas'];
+
+        // <select> devolve string; guardar já como string evita o valor
+        // selecionado "sumir" na comparação do Blade.
+        $this->mapa = [];
+        foreach (['nome', 'sku', 'categoria', 'quantidade_atual', 'estoque_minimo'] as $campo) {
+            $this->mapa[$campo] = isset($analise['mapa'][$campo]) ? (string) $analise['mapa'][$campo] : '';
+        }
+
+        $this->conferindo = true;
+    }
+
     public function importar(): void
     {
-        // Mensagens explícitas em português: a padrão do Laravel sairia
-        // como "The arquivo importacao field is required", que além de
-        // inglês nomeia a propriedade interna e não diz ao usuário o que
-        // fazer. O caso "required" aqui quase nunca é "esqueci de escolher"
-        // — é ter clicado antes do upload terminar, então a mensagem
-        // precisa apontar justamente para isso.
-        $this->validate([
-            'arquivoImportacao' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
-        ], [
-            'arquivoImportacao.required' => 'Escolha uma planilha e aguarde o envio terminar antes de importar.',
-            'arquivoImportacao.file' => 'O envio do arquivo não foi concluído. Escolha a planilha novamente.',
-            'arquivoImportacao.mimes' => 'Formato não suportado. Envie um arquivo .xlsx, .xls ou .csv.',
-            'arquivoImportacao.max' => 'A planilha passa de 5 MB. Divida em arquivos menores e importe um por vez.',
-        ]);
+        if (! $this->validarArquivo()) {
+            return;
+        }
 
-        $importacao = new ProductsImport;
+        if (($this->mapa['nome'] ?? '') === '') {
+            $this->addError('mapa.nome', 'Escolha qual coluna tem o nome do produto.');
+
+            return;
+        }
+
+        $mapa = [];
+        foreach ($this->mapa as $campo => $indice) {
+            if ($indice !== '') {
+                $mapa[$campo] = (int) $indice;
+            }
+        }
+
+        $importacao = new ProductsImport($mapa, $this->linhaCabecalho);
 
         try {
             Excel::import($importacao, $this->arquivoImportacao->getRealPath());
         } catch (RuntimeException $e) {
-            // Único erro que interrompe tudo: não deu pra achar sequer a
-            // coluna de nome. Linha solta inválida não aborta a importação,
-            // é contabilizada como ignorada.
             $this->addError('arquivoImportacao', $e->getMessage());
 
             return;
         }
 
         $this->showImport = false;
-        $this->reset('arquivoImportacao');
+        $this->conferindo = false;
+        $this->reset(['arquivoImportacao', 'mapa', 'amostra', 'colunasDaPlanilha']);
         session()->flash('status', $this->resumoDaImportacao($importacao));
+    }
+
+    /**
+     * Mensagens explícitas em português: a padrão do Laravel sairia como
+     * "The arquivo importacao field is required", que além de inglês nomeia
+     * a propriedade interna e não diz o que fazer. O caso "required" aqui
+     * quase nunca é "esqueci de escolher" — é ter clicado antes do upload
+     * terminar, então a mensagem aponta justamente para isso.
+     */
+    private function validarArquivo(): bool
+    {
+        try {
+            $this->validate([
+                'arquivoImportacao' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:5120'],
+            ], [
+                'arquivoImportacao.required' => 'Escolha uma planilha e aguarde o envio terminar antes de importar.',
+                'arquivoImportacao.file' => 'O envio do arquivo não foi concluído. Escolha a planilha novamente.',
+                'arquivoImportacao.mimes' => 'Formato não suportado. Envie um arquivo .xlsx, .xls ou .csv.',
+                'arquivoImportacao.max' => 'A planilha passa de 5 MB. Divida em arquivos menores e importe um por vez.',
+            ]);
+        } catch (ValidationException $e) {
+            // validate() preenche o error bag e lança; capturando aqui para
+            // não abortar a ação, o bag precisa ser reposto na mão — sem
+            // isso a tela ficaria sem nenhuma mensagem, só sem reagir.
+            $this->setErrorBag($e->validator->errors());
+
+            return false;
+        }
+
+        return true;
     }
 
     /**

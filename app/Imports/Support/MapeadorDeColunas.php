@@ -183,6 +183,103 @@ final class MapeadorDeColunas
     }
 
     /**
+     * Corrige o mapa olhando o CONTEÚDO das colunas, não só o cabeçalho.
+     *
+     * Existe cabeçalho ambíguo que só o dado resolve: em exportação de ERP
+     * estilo SAP a coluna "Material" é o CÓDIGO (1000013), enquanto em
+     * outros sistemas "Material" é o nome do produto. Se o nome apontar
+     * para uma coluna só de números e houver outra coluna de texto livre
+     * disponível, o texto é o nome — código não descreve produto nenhum.
+     *
+     * @param  array<string, int>  $mapa
+     * @param  list<array<int, mixed>>  $amostra  linhas de dados (sem o cabeçalho)
+     * @return array<string, int>
+     */
+    public function ajustarPeloConteudo(array $mapa, array $amostra): array
+    {
+        if ($amostra === [] || ! isset($mapa['nome'])) {
+            return $mapa;
+        }
+
+        if (! $this->colunaEhMajoritariamenteNumerica($amostra, $mapa['nome'])) {
+            return $mapa;
+        }
+
+        // O "nome" detectado é uma coluna numérica: procura uma coluna de
+        // texto que ainda não tenha dono para assumir o lugar.
+        $indices = [];
+        foreach ($amostra as $linha) {
+            foreach (array_keys($linha) as $indice) {
+                $indices[$indice] = true;
+            }
+        }
+
+        foreach (array_keys($indices) as $indice) {
+            if (in_array($indice, $mapa, true)) {
+                continue;
+            }
+
+            if (! $this->colunaEhMajoritariamenteNumerica($amostra, $indice)
+                && $this->colunaTemTextoUtil($amostra, $indice)) {
+                // A coluna numérica que estava como nome vira SKU, se ainda
+                // não houver um — é justamente o que ela é.
+                if (! isset($mapa['sku'])) {
+                    $mapa['sku'] = $mapa['nome'];
+                }
+
+                $mapa['nome'] = $indice;
+
+                return $mapa;
+            }
+        }
+
+        return $mapa;
+    }
+
+    /** @param  list<array<int, mixed>>  $amostra */
+    private function colunaEhMajoritariamenteNumerica(array $amostra, int $indice): bool
+    {
+        $preenchidas = 0;
+        $numericas = 0;
+
+        foreach ($amostra as $linha) {
+            $valor = $linha[$indice] ?? null;
+
+            if ($valor === null || $valor === '' || ! is_scalar($valor)) {
+                continue;
+            }
+
+            $preenchidas++;
+
+            if (is_numeric(str_replace([' ', '.', ','], '', (string) $valor))) {
+                $numericas++;
+            }
+        }
+
+        return $preenchidas > 0 && ($numericas / $preenchidas) >= 0.8;
+    }
+
+    /**
+     * Texto que serve como nome: precisa ter alguma letra e um mínimo de
+     * corpo — coluna de "UN"/"KG" ou de marcador "X" não é descrição.
+     *
+     * @param  list<array<int, mixed>>  $amostra
+     */
+    private function colunaTemTextoUtil(array $amostra, int $indice): bool
+    {
+        foreach ($amostra as $linha) {
+            $valor = $linha[$indice] ?? null;
+
+            if (is_scalar($valor) && preg_match('/\p{L}/u', (string) $valor)
+                && mb_strlen(trim((string) $valor)) >= 4) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Acha qual linha é o cabeçalho: muitos relatórios exportados trazem
      * título, data e linhas em branco antes da tabela de verdade, então
      * assumir "linha 1" quebraria nesses arquivos.
