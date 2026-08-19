@@ -42,7 +42,11 @@ ver [ARCHITECTURE.md](ARCHITECTURE.md).
   nunca apaga de verdade: o histórico de movimentação continua íntegro)
 - Lançamento de entrada/saída de estoque, com atualização automática da
   quantidade na mesma transação
-- Alerta visual quando produto atinge o estoque mínimo
+- Alerta visual quando produto atinge o estoque mínimo (`quantidade ≤
+  mínimo`). O dashboard avisa quando a maior parte do cadastro está sem
+  mínimo definido — nesse estado o alerta só aponta produto zerado, e sem
+  o aviso a tela pareceria dizer "está tudo bem" quando a verificação
+  está, na prática, desligada
 - Importação de produtos via planilha Excel **de formato livre**, com
   conferência antes de gravar:
   - as colunas são reconhecidas pelo cabeçalho, por sinônimos e em
@@ -140,7 +144,7 @@ php artisan test
 A suíte roda contra SQLite em memória (configurado em `phpunit.xml`, sem
 precisar de banco à parte) — decisão comum na comunidade Laravel para
 suíte rápida; nenhuma migration usa recurso específico de MySQL, então o
-comportamento é o mesmo. 111 testes, cobrindo:
+comportamento é o mesmo. 115 testes, cobrindo:
 
 - **isolamento multi-tenant** (`tests/Feature/Tenancy/`) — o requisito
   não-negociável da spec: Empresa A nunca lê, edita ou apaga dado da
